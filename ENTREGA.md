@@ -3,7 +3,7 @@
 Para continuar o projeto noutro computador. Escrito para ser lido por quem chega sem contexto
 nenhum, incluindo um assistente.
 
-Gerado: 2026-08-03 · actualizado: 2026-08-12, com as seis fases concluídas e validadas no telefone
+Gerado: 2026-08-03 · actualizado: 2026-08-13, com as seis fases concluídas e o visor aprovado nas duas orientações
 
 ---
 
@@ -40,6 +40,7 @@ o HAL fez pelas nossas costas.**
 | **F4** — Câmara | **fotómetro do RAW e linha de programa M/S/A/P, verificados no telefone**: a margem converge de +0,9 para **+0,5 EV** — o alvo exacto — e fica estável; quatro disparos consecutivos com valores idênticos. **182 testes.** Foco manual com realce de picos, verificado contra uma régua: o pico de nitidez cai nos 40 cm medidos e 1/2,498 D = 0,400 m, ou seja a escala bate a três algarismos. Visor e disparo têm tectos de tempo diferentes — 1/8 s e 1750 ms — com o que falta ao visor compensado por ganho de apresentação. **Confirmado**: em cena escura, 7,8 fps contra 0,6 antes, e o disparo leva 1750 ms honrados pelo HAL, casado pelo timestamp, com o visor a 8,0 fps logo depois. Kelvin e tinta em comando próprio, **provados contra folha branca sob lâmpada de 4000 K**: neutro a 1,7% / 4,1%, quando sem o eixo de tinta o melhor possível deixa 10% / 27%. O fotómetro passou a contar com o ganho de vinhetagem, que era o que fazia o RAW sair bom e o visor queimado. Fica aberto: a correcção de vinhetagem **piora** a uniformidade de cor (9,7% contra 4,4% no azul), e resolver isso precisa de um campo plano a sério — ecrã branco com difusor, não lâmpada. Ajudas feitas: zebras sobre o corte **do sensor** (via alfa da textura), histograma do verde do sensor, nível pelo acelerómetro |
 | F5 — Exportação e biblioteca | **o sidecar reconstrói a revelação**: bloco `Revelação` com a receita, `develop.py --sidecar` a lê-la, e as duas revelações concordam a **0,13% / 0,40%**. Biblioteca e ecrã de análise feitos — a lista mostra uma linha por **fotografia** com os três papéis, e tocar no nome mostra o que o HAL fez pelas costas. **Verificado no telefone ao bit**: revelar da biblioteca produz um TIFF com o nome da fotografia, em 9 s, **idêntico** (diferença máxima 0 de 255) ao do caminho de referência. **Decidido: TIFF16 e nenhum formato comprimido** — AVIF não existe na plataforma e exigiria libavif, contra a decisão de zero dependências. São três ficheiros por fotografia: negativo, receita, cópia revelada |
 | **F6** — Verificação anti-mastigação | **certificado feito e corrido**: 11 promessas, cada uma com o valor que a prova, assinado com modelo, build e data. **Todas verificadas** no dispositivo de referência. Botão «Certificado», ou `-e auto certificado` |
+| **UI** — visor em retrato e paisagem | **as duas aprovadas no telefone**. Retrato: disparador redondo ao centro, dois botões a encaixar nele pela **negativa do círculo**, pastilhas dos parâmetros, grelha de seis campos. Paisagem: imagem à esquerda com a proporção do mosaico e o topo alinhado com a linha do `MODO`, as seis pastilhas na **banda por baixo dela**, coluna de instrumentos de 272 dp à direita, e o disparador no bordo com as duas pastilhas mordidas por cima e por baixo. Falta a biblioteca e o ecrã de análise, que continuam com o aspecto antigo |
 
 ## 4. Ambiente
 
@@ -108,10 +109,27 @@ cd probe
 
 ```bash
 ADB=$ANDROID_HOME/platform-tools/adb
-$ADB install -r app/build/outputs/apk/debug/app-debug.apk
+$ADB install -r --user 0 app/build/outputs/apk/debug/app-debug.apk
 $ADB shell pm grant io.github.bmcsilva.latente android.permission.CAMERA
 $ADB shell am start -n io.github.bmcsilva.latente/.ui.MainActivity -e auto experiencias
 $ADB pull /sdcard/Download/Latente ./resultados
+```
+
+**O `--user 0` não é enfeite.** Sem ele o `adb install` instala no utilizador que a *shell* tiver por
+omissão, e neste telefone isso é o **150, a Pasta Segura** da Samsung — o `install` diz `Success`, o
+`dumpsys package` responde *Unable to find package*, e no telefone não aparece ícone nenhum. Custou uma
+volta inteira a perceber. Para confirmar onde ficou:
+
+```bash
+$ADB shell pm path io.github.bmcsilva.latente
+$ADB shell pm list users
+```
+
+**O ícone da gaveta abre a `MainActivity`**, que é o ecrã das experiências — «Latente · F1». A câmara é o
+botão **«Abrir o visor»** lá dentro, ou directamente:
+
+```bash
+$ADB shell am start -n io.github.bmcsilva.latente/.ui.ViewfinderActivity
 ```
 
 Os valores aceites no `-e auto`: `experiencias`, `disparar`, `revelar`, `visor`. Os dois últimos
@@ -330,9 +348,17 @@ Nenhuma é bug: a F1 tem os parâmetros no código por desenho. Passam a control
 **As seis fases estão feitas e validadas no telefone.** O que resta não são fases — é uso, desenho, e
 duas medições.
 
-**Desenho.** Há um protótipo em Figma (`Latente.fig`, e o brief em `latente-brief-ui.md`, versão curta em
-`latente-prompt-figma.txt`). A revisão está no progresso: a correcção a pedir primeiro é que os mockups
-foram feitos em **16:9** quando o sensor é **4:3**.
+**Desenho.** O **visor** está feito nas duas orientações e aprovado no telefone — ver §3 e, no progresso,
+«A banda por baixo do visor». O que resta do desenho são os **outros dois ecrãs**: a biblioteca e a
+análise, ainda com o aspecto antigo (lista de texto, sem miniatura, sem data, sem as etiquetas
+DNG/RCP/TIFF). Há um protótipo em Figma (`Latente.fig`, e o brief em `latente-brief-ui.md`, versão curta
+em `latente-prompt-figma.txt`); a correcção a pedir primeiro é que os mockups foram feitos em **16:9**
+quando o sensor é **4:3**.
+
+**Decisão por tomar, pequena e visível.** O ícone da gaveta abre a `MainActivity`, que é o ecrã das
+experiências, e a câmara é um botão lá dentro. Ficou assim desde a F1 e nunca foi decidido: numa
+aplicação de fotografia o ícone devia abrir o visor, com as experiências e o certificado atrás de um
+botão. É trocar o `intent-filter` no manifesto.
 
 **Medição que falta.** A correcção de vinhetagem parece degradar a uniformidade de cor — indício forte,
 não provado. Precisa de campo plano a sério: **difusor colado à lente contra um ecrã branco**, que é o
@@ -341,9 +367,10 @@ método que já resolveu a vinhetagem uma vez. Lâmpada não serve, tentou-se e 
 **Nunca medido.** Uso prolongado: temperatura e bateria depois de vinte minutos de visor. Numa medição de
 trinta segundos os relógios derivaram 15%; meia hora é outra coisa.
 
-**Ainda em aberto no código.** Trocar de objectiva no visor — a de 14 mm existe e está perfilada mas não
-é alcançável. E o stream que parou duas vezes sem explicação, agora instrumentado: se voltar, os
-contadores dizem se o reader deixou de avisar, se o `acquire` veio vazio, ou se lançou.
+**Ainda em aberto no código.** O stream que parou duas vezes sem explicação, agora instrumentado: se
+voltar, os contadores dizem se o reader deixou de avisar, se o `acquire` veio vazio, ou se lançou.
+(A troca de objectiva no visor **já está feita e verificada** — id 2, 14 mm f/2,2, foco fixo, com o
+Kelvin a atravessar a troca. Esta linha dizia o contrário e estava velha.)
 
 ### Como era antes desta secção
 

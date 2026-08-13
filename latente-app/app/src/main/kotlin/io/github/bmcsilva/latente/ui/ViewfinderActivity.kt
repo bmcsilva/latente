@@ -70,6 +70,24 @@ class ViewfinderActivity : Activity() {
         const val ANEL_ISO = 5
         const val ANEL_POSICOES = 6
 
+        /**
+         * A mordida, em dp. São medidas de uma só conta e por isso ficam juntas.
+         *
+         * O disparador tem 76 dp de vista e 74 de círculo desenhado; o círculo que morde é o dele mais
+         * uma folga, `LUA_RAIO`. Um arco de raio 39 não atravessa uma aresta maior do que 78 dp — daí a
+         * pastilha vertical ter a largura do disparador e não mais.
+         *
+         * `LUA_FUNDO` é o que resta de conta feita: com a corda a valer a aresta toda (76 menos o
+         * contorno), o centro do círculo fica 10,5 dp fora da pastilha, e 39 − 10,5 dá os 28 que a
+         * concavidade come. É também o quanto a pastilha sobe para encostar ao disparador.
+         */
+        const val LUA_RAIO = 39
+        const val LUA_LARGURA = 76
+        const val LUA_ALTURA = 64
+        const val LUA_FUNDO = 28
+        /** Em retrato a aresta mordida é a altura, 44 dp, e o arco cabe nela com 8 de profundidade. */
+        const val LUA_MORDIDA = 8
+
         // As ajudas, em bits: combinam-se, e por isso não são um índice.
         const val AJUDA_PICOS = 1
         const val AJUDA_ZEBRAS = 2
@@ -146,11 +164,17 @@ class ViewfinderActivity : Activity() {
     private lateinit var raiz: LinearLayout
     private lateinit var topo: LinearLayout
     private lateinit var fundo: LinearLayout
-    private lateinit var caixaDoVisor: FrameLayout
+    private lateinit var caixaDoVisor: AspectBox
     private lateinit var coluna: LinearLayout
+    private lateinit var colunaDoVisor: LinearLayout
     private lateinit var faixaDoDisparo: FrameLayout
     private lateinit var blocoTopo: LinearLayout
     private lateinit var grelha: LinearLayout
+    /** Onde as pastilhas e a fila dos comandos vivem em retrato. Ver `arrumar`. */
+    private lateinit var caixaDePastilhas: FrameLayout
+    private lateinit var caixaDosComandos: FrameLayout
+    /** A etiqueta do `MODO`: é por ela que o topo da imagem se alinha em paisagem. */
+    private var etiquetaDoModo: TextView? = null
     private var emPaisagem = false
     private var botaoDoDisparo: ShutterButton? = null
     private var comandosRef: LinearLayout? = null
@@ -240,7 +264,7 @@ class ViewfinderActivity : Activity() {
         topo.addView(avisosView)
 
         // --- faixa do meio: o visor, com as ajudas por cima ---
-        caixaDoVisor = FrameLayout(this)
+        caixaDoVisor = AspectBox(this)
         superficie = SurfaceView(this)
         caixaDoVisor.addView(superficie, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -321,10 +345,16 @@ class ViewfinderActivity : Activity() {
         // seis, e a 66 mm tem três.
         pastilhas = LinearLayout(this)
         pastilhas.orientation = LinearLayout.HORIZONTAL
+        // Um contentor vazio, e não a fila metida aqui de uma vez.
+        //
+        // Em paisagem as pastilhas mudam de coluna — vão para a banda por baixo da imagem —, e voltar
+        // a metê-las nesta faixa por índice é contar filhos à mão. O contentor guarda o lugar: em
+        // retrato tem-nas dentro, em paisagem fica vazio e não ocupa nada.
+        caixaDePastilhas = FrameLayout(this)
         val lpPastilhas = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         lpPastilhas.topMargin = dp(8)
-        fundo.addView(pastilhas, lpPastilhas)
+        fundo.addView(caixaDePastilhas, lpPastilhas)
 
         // Nasce com o modo **guardado**, não com um «P» escrito à mão: a câmara reabria em S e o botão
         // dizia P, que é o botão a mentir sobre o estado da máquina.
@@ -360,6 +390,8 @@ class ViewfinderActivity : Activity() {
             arranque = render?.exposicaoActual()
             arranqueDeAbertura = lente?.apertures?.firstOrNull() ?: 0f
             lente = nova
+            // Outro mosaico pode ter outra proporção, e a caixa do visor é medida por ela.
+            aplicarProporcaoDoVisor()
             botaoDaObjectiva?.let {
                 rotularBotaoDeMenu(it, nova.equivalentFocalMm.toString() + " MM", false)
             }
@@ -428,10 +460,14 @@ class ViewfinderActivity : Activity() {
         direita.addView(trocar, lpTrocar)
         comandos.addView(direita, LinearLayout.LayoutParams(0, dp(80), 1f))
 
+        // Pela mesma razão das pastilhas: em paisagem a fila desaparece e o disparador vai para a sua
+        // faixa. Sem contentor, ao voltar a retrato a fila era acrescentada no fim — por baixo da linha
+        // de estado, que é onde não é.
+        caixaDosComandos = FrameLayout(this)
         val lpComandos = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, dp(80))
         lpComandos.topMargin = dp(2)
-        fundo.addView(comandos, lpComandos)
+        fundo.addView(caixaDosComandos, lpComandos)
 
         // As mensagens de acontecimentos ficam **junto ao disparador**, que é o que as provoca: «a
         // disparar…», o nome do ficheiro escrito, um erro. Não são estado, são resposta a uma acção.
@@ -463,6 +499,9 @@ class ViewfinderActivity : Activity() {
 
         coluna = LinearLayout(this)
         coluna.orientation = LinearLayout.VERTICAL
+        // A coluna da esquerda em paisagem: a imagem, e por baixo dela a banda das pastilhas.
+        colunaDoVisor = LinearLayout(this)
+        colunaDoVisor.orientation = LinearLayout.VERTICAL
         faixaDoDisparo = FrameLayout(this)
 
         rotularAnel()
@@ -478,6 +517,8 @@ class ViewfinderActivity : Activity() {
         recusadas = corpo.rejected().filter { it.facing == 1 }
         qualObjectiva = 0
         lente = objectivas.firstOrNull()
+        // Agora que se sabe o mosaico, a caixa do visor pode tomar a proporção dele.
+        aplicarProporcaoDoVisor()
         etiqueta = corpo.deviceLabel()
         maxDioptrias = lente?.minFocusDiopters ?: 0f
 
@@ -553,6 +594,8 @@ class ViewfinderActivity : Activity() {
             val l1 = LinearLayout(this)
             l1.orientation = LinearLayout.HORIZONTAL
             campoModo = campo(l1, "MODO", 1f)
+            // A etiqueta, e não o valor: é ela que dá a linha por onde a imagem se alinha.
+            etiquetaDoModo = (campoModo.parent as ViewGroup).getChildAt(0) as TextView
             campoCortado = campo(l1, "CORTADO", 1f)
             blocoTopo.addView(l1)
 
@@ -630,8 +673,11 @@ class ViewfinderActivity : Activity() {
         emPaisagem = paisagem
         raiz.removeAllViews()
         coluna.removeAllViews()
+        colunaDoVisor.removeAllViews()
         faixaDoDisparo.removeAllViews()
-        for (v in arrayOf<View?>(topo, caixaDoVisor, fundo, botaoDoDisparo)) {
+        caixaDePastilhas.removeAllViews()
+        caixaDosComandos.removeAllViews()
+        for (v in arrayOf<View?>(topo, caixaDoVisor, fundo, botaoDoDisparo, pastilhas)) {
             (v?.parent as? ViewGroup)?.removeView(v)
         }
         montarTopo(paisagem)
@@ -670,20 +716,30 @@ class ViewfinderActivity : Activity() {
                 val pilha = LinearLayout(this)
                 pilha.orientation = LinearLayout.VERTICAL
                 pilha.gravity = android.view.Gravity.CENTER_HORIZONTAL
+                // **A largura do disparador, e não mais.** É geometria e não gosto: a mordida é a
+                // negativa de um círculo de 39 dp de raio, e um arco desses não atravessa uma aresta
+                // maior do que 78 dp. Com 84 o arco cobria 56% da aresta e as duas pontas ficavam a
+                // direito — que é o que se via, uma pastilha recta com um dente ao meio.
+                //
+                // A 76 dp o arco cobre a aresta toda, como em retrato: a curva é a do disparador, a
+                // folga é de 2 dp de ponta a ponta, e as duas peças encaixam. A altura sobe para 64 dp
+                // porque a concavidade come 28 — o texto vive nos 36 que sobram.
                 botaoDeAjudas?.let {
-                    val lp = LinearLayout.LayoutParams(dp(84), dp(44))
-                    lp.bottomMargin = dp(-6)
+                    val lp = LinearLayout.LayoutParams(dp(LUA_LARGURA), dp(LUA_ALTURA))
+                    // O encaixe: o círculo que morde tem de ser o do disparador. A pastilha sobe até o
+                    // centro dos dois coincidir, e a folga vem do raio — 39 contra os 37 desenhados.
+                    lp.bottomMargin = dp(-LUA_FUNDO)
                     pilha.addView(it, lp)
                 }
                 pilha.addView(d, LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
                 botaoDoModo?.let {
-                    val lp = LinearLayout.LayoutParams(dp(84), dp(44))
-                    lp.topMargin = dp(-6)
+                    val lp = LinearLayout.LayoutParams(dp(LUA_LARGURA), dp(LUA_ALTURA))
+                    lp.topMargin = dp(-LUA_FUNDO)
                     pilha.addView(it, lp)
                 }
                 botaoDaObjectiva?.let {
-                    val lp = LinearLayout.LayoutParams(dp(84), dp(44))
+                    val lp = LinearLayout.LayoutParams(dp(LUA_LARGURA), dp(44))
                     lp.topMargin = dp(10)
                     pilha.addView(it, lp)
                 }
@@ -692,7 +748,11 @@ class ViewfinderActivity : Activity() {
                 lp.gravity = android.view.Gravity.CENTER
                 faixaDoDisparo.addView(pilha, lp)
             } else {
-                comandosRef?.let { c -> if (c.parent == null) fundo.addView(c) }
+                comandosRef?.let { c ->
+                    (c.parent as? ViewGroup)?.removeView(c)
+                    caixaDosComandos.addView(c, FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+                }
                 celulaEsquerdaRef?.let { ce ->
                     botaoDeAjudas?.let {
                         ce.addView(it, LinearLayout.LayoutParams(
@@ -714,6 +774,8 @@ class ViewfinderActivity : Activity() {
                 comandosRef?.addView(d, 1, lp)
             }
         }
+        caixaDePastilhas.visibility = if (paisagem) View.GONE else View.VISIBLE
+        caixaDosComandos.visibility = if (paisagem) View.GONE else View.VISIBLE
         if (paisagem) {
             raiz.orientation = LinearLayout.HORIZONTAL
             // A imagem **encostada ao topo**, alinhada com o `MODO`, e não centrada.
@@ -722,25 +784,43 @@ class ViewfinderActivity : Activity() {
             // centrá-la punha metade do preto que sobra acima dela — onde não serve para nada. Encostada
             // ao topo, todo o preto que sobra fica **numa só banda por baixo**, que é espaço utilizável.
             caixaDoVisor.setPadding(0, 0, 0, 0)
-            raiz.addView(caixaDoVisor, LinearLayout.LayoutParams(
+            caixaDoVisor.folgaEmBaixo = dp(39)
+            aplicarProporcaoDoVisor()
+            colunaDoVisor.addView(caixaDoVisor, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            // As pastilhas na banda, à largura da imagem.
+            //
+            // A banda deixou de ser preto a mais: é a quarta zona do ecrã. E a largura dela dá as seis
+            // pastilhas numa fila — na coluna estreita não cabiam três, e era por isso que iam a duas
+            // filas a roubar altura ao visor.
+            val lpFila = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            lpFila.topMargin = dp(5)
+            colunaDoVisor.addView(pastilhas, lpFila)
+            raiz.addView(colunaDoVisor, LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
             alinharVisorAoTopo(true)
+            alinharColunaPeloModo()
             coluna.addView(topo, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             coluna.addView(fundo, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-            // 320 dp, e a imagem paga.
+            // 272 dp, e a imagem agradece.
             //
-            // A 250 dp cada um dos três campos ficava com 83, e «TEMPERATURA» não cabe em 83 — as
-            // etiquetas partiam-se e a grelha desalinhava. Com 320 são 106 cada, que é folgado. A imagem
-            // passa a 1080 px de largura em vez de 1440 e ganha barras acima e abaixo: perde-se área e
-            // ganha-se uma coluna legível, que num visor é a troca certa — a informação que não se lê
-            // não vale a área que ocupa.
-            raiz.addView(coluna, LinearLayout.LayoutParams(dp(300),
+            // Eram 300, e 320 antes disso, porque a coluna levava as pastilhas: seis nomes numa coluna
+            // estreita não cabem. Saindo elas para a banda, o que a coluna tem de aguentar são dois
+            // campos por linha — «TEMPERATURA» a 8 sp mede 65 dp e cada célula fica com 113. Os 28 dp
+            // que sobram vão para a imagem, que é onde valem alguma coisa.
+            raiz.addView(coluna, LinearLayout.LayoutParams(dp(272),
                 ViewGroup.LayoutParams.MATCH_PARENT))
-            raiz.addView(faixaDoDisparo, LinearLayout.LayoutParams(dp(110),
+            // A faixa do disparador acompanha: a pilha passou de 84 para os 76 dp do disparador.
+            raiz.addView(faixaDoDisparo, LinearLayout.LayoutParams(dp(96),
                 ViewGroup.LayoutParams.MATCH_PARENT))
         } else {
+            aplicarProporcaoDoVisor()
+            caixaDePastilhas.addView(pastilhas, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            colunaDoVisor.setPadding(0, 0, 0, 0)
             raiz.orientation = LinearLayout.VERTICAL
             raiz.addView(topo, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -749,6 +829,24 @@ class ViewfinderActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
             raiz.addView(fundo, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+    }
+
+    /**
+     * Dá à caixa do visor a proporção do mosaico, para as pastilhas ficarem encostadas à imagem.
+     *
+     * Fora do `arrumar` porque a objectiva chega **depois** dele: o `onCreate` arruma o ecrã e só a
+     * seguir pergunta ao corpo que objectivas há. Feito só lá dentro, o primeiro arranque em paisagem
+     * ficava com a caixa a ocupar a coluna toda e as pastilhas depois de um vão de preto — e só se
+     * corrigia à primeira rotação. Chamam-no os dois sítios que sabem alguma coisa nova: o que arruma
+     * e o que troca de objectiva.
+     *
+     * Em retrato é zero: lá a imagem é centrada no que sobra entre as faixas, como sempre foi.
+     */
+    private fun aplicarProporcaoDoVisor() {
+        val m = lente?.rawSize
+        caixaDoVisor.proporcao = if (!emPaisagem || m == null) 0f else {
+            Math.max(m.width, m.height).toFloat() / Math.min(m.width, m.height)
         }
     }
 
@@ -764,6 +862,31 @@ class ViewfinderActivity : Activity() {
     }
 
     private var aoTopo = false
+
+    /**
+     * Desce a coluna do visor até o topo da imagem cair na **linha do texto `MODO`**.
+     *
+     * Não é uma margem escolhida a olho: a etiqueta tem o preenchimento da faixa por cima e o vão que a
+     * fonte deixa entre o topo da caixa de texto e o topo das letras. Somar isso à mão dava um número
+     * que envelhecia à primeira mudança de tamanho. Aqui pergunta-se às vistas onde a letra está de
+     * facto, depois de medidas.
+     *
+     * Conta-se antes de medir, e não com as vistas já postas no ecrã: mexer no preenchimento depois da
+     * medida mudava a altura da caixa do visor, e mudar a altura da caixa **reinicia a câmara** — um
+     * segundo perdido e o fotómetro a começar do zero, a cada rotação. São duas parcelas, e as duas
+     * sabem-se sem medir nada: o preenchimento da faixa de cima, e o vão que a fonte deixa entre o topo
+     * da caixa de texto e o topo das letras.
+     *
+     * Pressupõe que a etiqueta é a primeira coisa da faixa — é, e se deixar de ser o alinhamento
+     * fica-se pelo preenchimento da faixa, que é erro de poucos píxeis e não de vistas trocadas.
+     */
+    private fun alinharColunaPeloModo() {
+        val e = etiquetaDoModo ?: return
+        val fm = e.paint.fontMetricsInt
+        // `top` é o que a fonte reserva acima do apoio, `ascent` é onde as letras começam de facto. A
+        // diferença é o vão, e é a ele que se deve o texto parecer sempre mais baixo do que a caixa.
+        colunaDoVisor.setPadding(0, topo.paddingTop + (fm.ascent - fm.top), 0, 0)
+    }
 
     override fun onConfigurationChanged(nova: android.content.res.Configuration) {
         super.onConfigurationChanged(nova)
@@ -915,9 +1038,12 @@ class ViewfinderActivity : Activity() {
         assinaturaDoAnel = assinatura
         barra?.corDoNivel = corDoParametro(anel)
         pastilhas.removeAllViews()
-        // Numa coluna de 250 dp seis pastilhas em fila dão 40 dp cada, e «KELVIN» sai cortado em
-        // «KELVI». Em paisagem vão em filas de três; em retrato há largura para todas de uma vez.
-        val porFila = if (emPaisagem) 3 else ANEL_POSICOES
+        // Uma fila, nos dois sentidos.
+        //
+        // Em paisagem iam a três porque viviam na coluna estreita, onde seis davam 40 dp cada e
+        // «KELVIN» saía cortado em «KELVI». Agora vivem na banda por baixo da imagem, que tem a largura
+        // dela: as seis cabem, e a segunda fila deixa de roubar altura ao visor.
+        val porFila = ANEL_POSICOES
         pastilhas.orientation = LinearLayout.VERTICAL
         var fila: LinearLayout? = null
         var quantas = 0
@@ -1086,19 +1212,6 @@ class ViewfinderActivity : Activity() {
         v.letterSpacing = 0.02f
         v.maxLines = 1
         v.isClickable = true
-        // A mordida come 8 dp de um dos lados, e o texto centra-se na **vista**, não na forma: sem
-        // este preenchimento o «AUTO» começava dentro da curva e saía por fora dela.
-        // O texto centra-se no espaço que sobra entre a mordida de um lado e o acento do outro.
-        // O texto centra-se no que sobra: a mordida come de um lado, o acento do outro. Apertado de
-        // propósito — «66 MM» tem de caber, e cada dp de preenchimento é um dp que lhe falta.
-        // Só o que a mordida obriga: o acento já está no texto e não precisa de espaço reservado.
-        when (lua) {
-            1 -> v.setPadding(dp(13), 0, dp(2), 0)
-            2 -> v.setPadding(dp(2), 0, dp(13), 0)
-            3 -> v.setPadding(dp(4), dp(9), dp(4), 0)
-            4 -> v.setPadding(dp(4), 0, dp(4), dp(9))
-            else -> v.setPadding(dp(4), 0, dp(4), 0)
-        }
         rotularBotaoDeMenu(v, texto, false)
         return v
     }
@@ -1124,8 +1237,34 @@ class ViewfinderActivity : Activity() {
         val fundo = if (aceso) 0xFF10292E.toInt() else 0xFF1F2226.toInt()
         val contorno = if (aceso) CIANO else 0xFF33383E.toInt()
         val lua = v.tag as? Int ?: 0
+        // O preenchimento é feito **aqui** e não na criação do botão, porque o lado da mordida muda com
+        // o ecrã: o mesmo «AJUDAS» é mordido à direita em retrato e na base em paisagem. Posto uma vez
+        // só, ficava com o preenchimento do retrato e o texto sentava-se em cima da curva — e os dois
+        // ramos verticais nunca chegavam a correr, porque nenhum botão nasce mordido em cima ou em
+        // baixo.
+        //
+        // O texto centra-se no que sobra: a mordida come de um lado, o acento do outro. Apertado de
+        // propósito — «66 MM» tem de caber, e cada dp de preenchimento é um dp que lhe falta.
+        when (lua) {
+            1 -> v.setPadding(dp(13), 0, dp(2), 0)
+            2 -> v.setPadding(dp(2), 0, dp(13), 0)
+            // Na vertical a concavidade come `LUA_FUNDO` a meio da aresta, que é onde o texto está. O
+            // preenchimento tira-o de lá: o texto centra-se no que resta e não dentro da curva.
+            3 -> v.setPadding(dp(4), dp(LUA_FUNDO + 2), dp(4), 0)
+            4 -> v.setPadding(dp(4), 0, dp(4), dp(LUA_FUNDO + 2))
+            else -> v.setPadding(dp(4), 0, dp(4), 0)
+        }
+        // A profundidade não é a mesma nos dois sentidos, e não é gosto: é a aresta que muda. Em
+        // retrato morde-se a altura, 44 dp, e o círculo de 39 atravessa-a inteira com 8 de fundo. Em
+        // paisagem morde-se a largura, 76 dp, e para o mesmo círculo atravessar uma aresta dessas tem
+        // de entrar `LUA_FUNDO`. As duas curvas são a mesma — a do disparador.
+        val fundura = when (lua) {
+            0 -> 0f
+            3, 4 -> dp(LUA_FUNDO).toFloat()
+            else -> dp(LUA_MORDIDA).toFloat()
+        }
         v.background = MoonBackground(fundo, contorno, dp(1).toFloat(),
-            dp(39).toFloat(), if (lua == 0) 0f else dp(8).toFloat(), lado = lua)
+            dp(LUA_RAIO).toFloat(), fundura, lado = lua)
 
     }
 

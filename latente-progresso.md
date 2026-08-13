@@ -2112,7 +2112,7 @@ Ideia do utilizador. O que em retrato o flanqueia — ajudas de um lado, modo e 
 a flanqueá-lo em coluna, acima e abaixo. É a mesma vizinhança vista de lado, e não uma disposição nova
 para decorar. De caminho tirou três botões da coluna, que era onde faltava altura.
 
-#### O que a banda por baixo do visor tem de receber — a decidir
+#### O que a banda por baixo do visor tem de receber — feito, ver a secção seguinte
 
 A imagem encostada ao topo já está feita, mas a ideia só rende se a banda que sobra **receber
 controlos**. Neste momento o preto que sobra está na coluna da imagem e a falta de altura está na coluna
@@ -2129,12 +2129,73 @@ Ficam por acertar, todos diagnosticados: a compensação aparece colada à tinta
 falta de largura; o `VINH OK` e o `CORTE NO SENSOR` continuam em maiúsculas porque são construídos no
 fio de render e não no ecrã; e falta a barra de acento antes do aviso.
 
+### A banda por baixo do visor, e a mordida que não curvava
+
+Duas coisas, e a segunda é geometria pura.
+
+#### A banda passou a ser a quarta zona do ecrã
+
+A caixa do visor deixou de ter a altura da coluna e passou a ter a **proporção do mosaico** — uma
+`AspectBox`, que se mede pela imagem e não pelo que sobra. Foi isso que faltava: as pastilhas postas a
+seguir apareciam depois de um vão de preto, porque a caixa era alta e a imagem não. Agora o que vem a
+seguir fica encostado ao fundo da imagem, sem contas na actividade.
+
+Com a banda a ter a largura da imagem, as seis pastilhas cabem **numa fila**. Iam a duas filas de três
+por viverem na coluna estreita, e essas duas filas eram altura roubada ao visor.
+
+O topo da imagem alinha com a **linha do texto** `MODO`, e o desvio conta-se antes de medir: o
+preenchimento da faixa mais o vão que a fonte deixa entre o topo da caixa de texto e o topo das letras
+(`ascent − top`). Medir depois de as vistas estarem postas obrigava a mexer no preenchimento a
+posteriori, e isso muda a altura da caixa do visor — que **reinicia a câmara**. Um segundo perdido e o
+fotómetro a começar do zero, a cada rotação.
+
+A imagem ganhou largura de dois lados: a coluna passou de 300 para 272 dp (saindo-lhe as pastilhas, o
+que tem de aguentar são dois campos por linha, e «TEMPERATURA» a 8 sp mede 65 dp em células de 113) e a
+faixa do disparador de 110 para 96, porque a pilha encolheu para os 76 dp do disparador.
+
+De caminho, dois contentores fixos para as pastilhas e para a fila dos comandos. Voltar de paisagem a
+retrato acrescentava a fila no fim da faixa — **por baixo da linha de estado**, que é onde não é.
+
+#### A mordida em paisagem: não era afinação, era a aresta
+
+Estava a ler-se recta, e a conta diz porquê: o arco cobria **56% da aresta** de 84 dp e as duas pontas
+ficavam a direito. O círculo que morde tem 39 dp de raio, ou seja 78 de diâmetro, e um arco desses não
+atravessa uma aresta de 84 — não há profundidade que o resolva.
+
+Em retrato a aresta mordida é a **altura**, 44 dp, e o círculo atravessa-a inteira com 8 dp de fundo:
+por isso é que ali a aresta curva toda. Foi o utilizador a escolher a saída honesta: em paisagem a
+pastilha encolhe para os **76 dp do disparador** e cresce para 64 de altura. A corda passa a valer a
+aresta toda, o centro do círculo fica 10,5 dp fora da pastilha, e 39 − 10,5 dá os **28 dp** que a
+concavidade come — e que a pastilha sobe para encostar ao disparador. A curva é a dele, a folga é de
+2 dp de ponta a ponta, e as duas peças encaixam como em retrato. Custa duas pontas a passar o círculo,
+que é o preço de a curva ser mesmo a do círculo.
+
+A alternativa era manter a pastilha em 84×44 e curvar a aresta toda com 8 dp de fundo — mas isso exige
+raio 114, o triplo do disparador. Ficava bonito e deixava de acompanhar coisa nenhuma.
+
+E havia um segundo defeito por baixo do primeiro: o preenchimento do botão era posto **na criação**, e o
+lado da mordida muda com o ecrã. O mesmo «AJUDAS» é mordido à direita em retrato e na base em paisagem,
+mas nasce sempre em retrato — os dois ramos verticais do `when` nunca chegavam a correr, e em paisagem o
+texto sentava-se em cima da curva. Passou para o `rotularBotaoDeMenu`, que é quem já sabe o lado.
+
+**Verificado no telefone pelo utilizador**, e aprovado. 197 testes passam.
+
+De caminho, uma armadilha do ambiente que custou uma volta: o `adb install` sem `--user 0` instala no
+utilizador que a *shell* tem por omissão, que neste telefone é o **150, a Pasta Segura**. Diz `Success`,
+o `dumpsys package` responde *Unable to find package*, e no telefone não aparece ícone nenhum. Está na
+ENTREGA, §5.
+
 ### O que falta na UI
 
 1. **Confirmar a rotação** no telefone (acima).
 2. **Ecrãs da biblioteca e da análise**, ainda com o aspecto antigo: lista de texto, sem a miniatura, a
    data e as etiquetas DNG/RCP/TIFF que o desenho tem.
-3. **Layout de paisagem** — o *chrome* para os lados.
+3. ~~**Layout de paisagem**~~ — feito e aprovado no telefone. Ver «A banda por baixo do visor».
+4. **Três acabamentos diagnosticados**, todos pequenos: a compensação aparece colada à tinta
+   (`+0.00  -1.1 EV`) por falta de largura; o `VINH OK` e o `CORTE NO SENSOR` continuam em maiúsculas
+   porque são construídos no fio de render e não no ecrã; e falta a barra de acento antes do aviso.
+5. **O ícone da gaveta abre o ecrã das experiências**, e a câmara é um botão lá dentro. Foi assim desde
+   a F1 e nunca foi decidido — é decisão a tomar, não defeito.
 
 Nota de método: o modo pode não sobreviver a um `am force-stop` porque o `apply()` das preferências é
 assíncrono e o processo morre antes de o disco ser escrito. É artefacto do ensaio, não do uso — ao sair
