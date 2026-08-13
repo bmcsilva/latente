@@ -36,12 +36,22 @@ class MoonBackground(
      * duas contas parecidas a poderem divergir.
      */
     private val mordidaAEsquerda: Boolean = true,
+    /**
+     * O triângulo de «abre lista», desenhado no fundo e **não escrito no texto**.
+     *
+     * Estava no texto e era o que desalinhava tudo: quem centra um `TextView` centra «AUTO ▾», não
+     * «AUTO», e a palavra ficava metade de um triângulo à esquerda do meio. Aqui é marca do controlo,
+     * fica encostado ao lado que a mordida não ocupa, e o texto centra-se sozinho.
+     */
+    private val corDoAcento: Int = 0,
 ) : Drawable() {
 
     private val tintaDeFundo = Paint(Paint.ANTI_ALIAS_FLAG)
     private val tintaDoContorno = Paint(Paint.ANTI_ALIAS_FLAG)
     private val caminho = Path()
     private val oval = RectF()
+    private val acento = Path()
+    private val tintaDoAcento = Paint(Paint.ANTI_ALIAS_FLAG)
 
     init {
         tintaDeFundo.style = Paint.Style.FILL
@@ -49,6 +59,7 @@ class MoonBackground(
         tintaDoContorno.style = Paint.Style.STROKE
         tintaDoContorno.color = corDoContorno
         tintaDoContorno.strokeWidth = espessura
+        tintaDoAcento.style = Paint.Style.FILL
     }
 
     override fun onBoundsChange(bounds: android.graphics.Rect) {
@@ -67,6 +78,11 @@ class MoonBackground(
 
         // O círculo que morde: centro à esquerda do botão, de modo que o seu bordo direito entre
         // `profundidade` píxeis a meio da altura.
+        if (profundidade <= 0f) {
+            oval.set(meia, topo, direita, base)
+            caminho.addRoundRect(oval, r, r, Path.Direction.CW)
+            return
+        }
         val raio = Math.max(raioDaMordida, altura / 2f + 1f)
         val cx = profundidade + meia - raio
         val cy = h / 2f
@@ -97,6 +113,22 @@ class MoonBackground(
         if (caminho.isEmpty) construir(bounds.width().toFloat(), bounds.height().toFloat())
         canvas.drawPath(caminho, tintaDeFundo)
         if (espessura > 0f) canvas.drawPath(caminho, tintaDoContorno)
+        if (corDoAcento == 0) return
+
+        val w = bounds.width().toFloat()
+        val h = bounds.height().toFloat()
+        val lado = h * 0.085f
+        // Do lado que a mordida não come. Encostado, mas não na borda: um triângulo colado ao contorno
+        // lê-se como defeito do contorno.
+        val cx = if (mordidaAEsquerda) w - lado * 2.2f else lado * 2.2f
+        val cy = h / 2f
+        acento.reset()
+        acento.moveTo(cx - lado, cy - lado * 0.55f)
+        acento.lineTo(cx + lado, cy - lado * 0.55f)
+        acento.lineTo(cx, cy + lado * 0.75f)
+        acento.close()
+        tintaDoAcento.color = corDoAcento
+        canvas.drawPath(acento, tintaDoAcento)
     }
 
     override fun setAlpha(alpha: Int) {}

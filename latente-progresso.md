@@ -2039,9 +2039,27 @@ depois da biblioteca e da análise, senão a decisão de onde vai cada peça tom
 66 mm, o disparador, as pastilhas com cor por parâmetro, a barra com `−`/`+`, os três menus e a
 meia-lua do modo.
 
-**Não verificado no telefone:** a rotação pelo acelerómetro — compila e passa nos testes, mas ninguém a
-viu a seguir o pulso. É o primeiro a confirmar da próxima vez: deitar o telefone e ver se a cena fica
-de pé no visor e se o DNG sai com `Orientation 1`.
+#### A rotação: verificada, e o sinal estava trocado
+
+Medida com o utilizador a segurar o telefone em cada posição, com o ângulo e o quadrante instrumentados
+no rodapé. **Sem o instrumento não havia como decidir**: a captura de ecrã sai no referencial do
+telefone, que está rodado em relação ao que o utilizador vê, e a primeira tentativa foi eu a deduzir da
+captura — e a deduzir mal.
+
+| posição | ângulo lido | quadrante | ficheiro |
+|---|---|---|---|
+| retrato | −2° | 0 | `Orientation 6` |
+| deitado para a esquerda | −91° | **90** | **`Orientation 1`** |
+
+**O sinal é o contrário do intuitivo.** O `Present.rotationFor` espera o que o Android chama rotação do
+*ecrã* — quanto o conteúdo tem de rodar para compensar o corpo, e não quanto o corpo rodou. Deitar para
+a esquerda é `ROTATION_90`, e a gravidade nessa posição lê-se a −91 graus. Tinha-os trocados, e
+`(90 − 270 + 360) % 360` dava 180: a fotografia saía de pernas para o ar, com `Orientation 3`.
+
+O instrumento saiu depois de servir.
+
+**O projeto passou a estar em git** — `github.com/bmcsilva/latente`, e o trabalho passou a fazer-se no
+clone para tudo ficar versionado.
 
 ### O que falta na UI
 

@@ -352,23 +352,11 @@ class ViewfinderActivity : Activity() {
             .let { if (it == ExposureProgram.Mode.A) ExposureProgram.Mode.P else it }.name,
             lua = 1)
         botaoDoModo = modo
-        modo.setOnClickListener {
-            if (lente?.manualExposure == false) {
-                dizer("nesta objectiva a exposição é da câmara — não há modos a escolher")
-                return@setOnClickListener
-            }
-            render?.proximoModo()
-            // Mudar de modo muda quem possui o tempo e o ISO. Se o anel estava numa posição que o modo
-            // novo não tem, sai dela — senão ficava um comando a mexer no que já não é do utilizador.
-            if (!posicaoPermitida(anel)) {
-                anel = proximaPosicao(anel)
-                prefs?.dial = anel
-            }
-            // Sempre, e não só quando o anel muda de posição: o modo novo pode ter outro tempo ou outro
-            // ISO em vigor, e a barra tem de apontar para onde o parâmetro está agora.
-            reporBarra()
-            rotularAnel()
-        }
+        // O menu, como nos outros dois. Ficara o código antigo — ciclar e, na 66 mm, recusar com uma
+        // mensagem —, e é pior: uma recusa numa linha que desaparece não diz **o que existe**. O menu
+        // mostra os três modos apagados com a razão ao lado, que é a mesma honestidade das objectivas
+        // recusadas.
+        modo.setOnClickListener { menuDeModos(modo) }
 
         val disparador = ShutterButton(this)
         disparador.setOnClickListener {
@@ -455,7 +443,9 @@ class ViewfinderActivity : Activity() {
         // As larguras têm de caber na célula, que é metade do que sobra depois da meia-lua: 984 px
         // menos os 288 da meia-lua dá 348 px de cada lado, ou seja 116 dp. Com 130 dp o grupo entrava
         // por cima do disparador — e o «P» aparecia meio tapado.
-        direita.addView(modo, LinearLayout.LayoutParams(dp(54), dp(44)))
+        // Largura para o pior caso, que é «AUTO» e não «P»: um botão que encolhe e cresce com o texto
+        // faria a fila saltar de sítio a cada troca de objectiva.
+        direita.addView(modo, LinearLayout.LayoutParams(dp(64), dp(44)))
         // A mesma altura das outras duas. Ficara nos 38 dp de quando os botões eram rectângulos, e ao
         // lado de duas pastilhas de 44 lia-se como se estivesse encolhida.
         val lpTrocar = LinearLayout.LayoutParams(0, dp(44), 1f)
@@ -600,8 +590,14 @@ class ViewfinderActivity : Activity() {
         val angulo = Math.toDegrees(Math.atan2(-x.toDouble(), y.toDouble()))
         val novo = when {
             angulo > -25 && angulo < 25 -> 0
-            angulo > 65 && angulo < 115 -> 90
-            angulo < -65 && angulo > -115 -> 270
+            // **O sinal é o contrário do intuitivo**, e foi medido.
+            //
+            // O `rotationFor` espera o que o Android chama rotação do *ecrã*: quanto o conteúdo tem de
+            // rodar para compensar o corpo, e não quanto o corpo rodou. Deitar o telefone para a
+            // esquerda dá `ROTATION_90`, e a gravidade nessa posição lê-se a −91 graus. Tinha-os
+            // trocados, e o ficheiro saía com 180 — a fotografia de pernas para o ar.
+            angulo > 65 && angulo < 115 -> 270
+            angulo < -65 && angulo > -115 -> 90
             Math.abs(angulo) > 155 -> 180
             else -> return
         }
@@ -844,11 +840,21 @@ class ViewfinderActivity : Activity() {
         val v = TextView(this)
         v.tag = lua
         v.gravity = android.view.Gravity.CENTER
-        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-        v.letterSpacing = 0.06f
+        v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+        v.letterSpacing = 0.02f
         v.maxLines = 1
         v.isClickable = true
-        v.setPadding(dp(2), 0, dp(2), 0)
+        // A mordida come 8 dp de um dos lados, e o texto centra-se na **vista**, não na forma: sem
+        // este preenchimento o «AUTO» começava dentro da curva e saía por fora dela.
+        // O texto centra-se no espaço que sobra entre a mordida de um lado e o acento do outro.
+        // O texto centra-se no que sobra: a mordida come de um lado, o acento do outro. Apertado de
+        // propósito — «66 MM» tem de caber, e cada dp de preenchimento é um dp que lhe falta.
+        // Só o que a mordida obriga: o acento já está no texto e não precisa de espaço reservado.
+        when (lua) {
+            1 -> v.setPadding(dp(13), 0, dp(2), 0)
+            2 -> v.setPadding(dp(2), 0, dp(13), 0)
+            else -> v.setPadding(dp(4), 0, dp(4), 0)
+        }
         rotularBotaoDeMenu(v, texto, false)
         return v
     }
@@ -862,6 +868,9 @@ class ViewfinderActivity : Activity() {
         // O acento é um triângulo **mais pequeno e apagado** do que o nome, e não um caracter do mesmo
         // tamanho ao lado dele. Assim lê-se como marca de «abre lista» e não como parte do valor —
         // «23 MM ⌄» dava a entender que o ⌄ dizia alguma coisa sobre a objectiva.
+        // O acento volta ao texto, mais pequeno e apagado — era como estava e é como se prefere. Fica
+        // parte do rótulo, e por isso o botão tem de ter largura para o nome **e** para ele: foi por
+        // falta dela que o «23 MM» apareceu cortado em «23».
         val t = android.text.SpannableString("$texto  ▾")
         val i = texto.length + 2
         t.setSpan(android.text.style.RelativeSizeSpan(0.72f), i, t.length, 0)
@@ -871,20 +880,10 @@ class ViewfinderActivity : Activity() {
         val fundo = if (aceso) 0xFF10292E.toInt() else 0xFF1F2226.toInt()
         val contorno = if (aceso) CIANO else 0xFF33383E.toInt()
         val lua = v.tag as? Int ?: 0
-        v.background = if (lua != 0) {
-            // Raio 39 = os 37 do círculo desenhado mais 2 de folga, para as duas curvas ficarem
-            // paralelas: com um raio muito maior, a fresta abria nas pontas e fechava a meio, e via-se
-            // como desalinhamento. Profundidade 8, que é o mínimo para a curva caber — a 44 dp de
-            // altura ela varre 6,8 dp na horizontal.
-            MoonBackground(fundo, contorno, dp(1).toFloat(), dp(39).toFloat(), dp(8).toFloat(),
-                mordidaAEsquerda = lua == 1)
-        } else {
-            val g = android.graphics.drawable.GradientDrawable()
-            g.cornerRadius = dp(19).toFloat()
-            g.setColor(fundo)
-            g.setStroke(dp(1), contorno)
-            g
-        }
+        v.background = MoonBackground(fundo, contorno, dp(1).toFloat(),
+            dp(39).toFloat(), if (lua == 0) 0f else dp(8).toFloat(),
+            mordidaAEsquerda = lua != 2)
+
     }
 
     /** Uma pastilha: o nome do parâmetro, e o fundo a dizer se é ela que o comando mexe. */
