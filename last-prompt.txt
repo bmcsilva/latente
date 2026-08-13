@@ -1,0 +1,28 @@
+F0 concluída. Sonda escrita, a compilar e com testes a passar.
+
+Verificado de facto:
+
+:app:assembleDebug — BUILD SUCCESSFUL, zero avisos do compilador
+APK de depuração: 2,4 MB
+9 testes JVM aos escritores de relatório, 0 falhas (forcei a correr de novo depois de remover o teste temporário)
+Saída em texto e JSON inspeccionada à mão
+Não verificado: execução em telefone. Não havia dispositivo ligado por adb, portanto a sonda nunca correu contra um HAL verdadeiro. É o passo que te toca.
+
+
+cd ~/Workspace/Projects/latente/probe
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+Na app: Correr sonda → Testar abertura → Guardar. O relatório fica em Downloads/Latente/ em .txt e .json. Corre o teste de abertura antes de guardar, para entrar no mesmo ficheiro.
+
+Documentos:
+
+latente-progresso.md — https://claude.ai/code/artifact/e3449953-6461-4b92-b9f9-2cd13509e6d8
+latente-especificacao-tecnica.md — versão 3, mesmo link de antes
+Duas correcções à especificação que o código revelou, já aplicadas:
+
+Não existe chave pública REQUEST_AVAILABLE_REQUEST_KEYS — as chaves que o HAL declara honrar leem-se pelos métodos getAvailableCaptureRequestKeys() / getAvailableCaptureResultKeys() / getAvailableSessionKeys().
+Existe SENSOR_INFO_LENS_SHADING_APPLIED, que responde directamente ao teste §10.4: a plataforma diz-te se o HAL já corrigiu vinhetagem no RAW, sem precisares de fotografar um campo uniforme. A sonda já o lê e emite um aviso explícito se vier true.
+Mudei o pacote para pt.bmcsilva.latente.probe — se preferires com.bmcsilva ou io.github.bmcsilva, são duas linhas.
+
+A primeira coisa a olhar no relatório é o Resumo → câmaras aptas a RAW manual. Se disser NENHUMA, paramos e repensamos antes da F1. As minhas apostas ficaram escritas no documento de progresso para podermos comparar: ultra-grande-angular e teleobjectiva sem RAW, RAW binned a ~um quarto dos MP anunciados, tecto de exposição bem abaixo dos 30 s do modo Pro, e SENSOR_INFO_LENS_SHADING_APPLIED a true.
+
+Manda o .txt quando o tiveres e leio-o contigo.

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <uses-feature android:name="android.hardware.camera.any" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.raw" android:required="true" />
+
+    <!--
+        O monte por omissão são 256 MB neste telefone, e uma imagem de 12 Mpx em vírgula flutuante
+        são 150 MB só por si — mais 50 MB do mosaico enquanto o demosaico corre. Não é desperdício
+        que se possa optimizar: é o tamanho do dado. Um revelador de RAW é um dos casos legítimos
+        para esta bandeira.
+    -->
+    <application
+        android:label="Latente"
+        android:icon="@android:drawable/ic_menu_camera"
+        android:largeHeap="true"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material">
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:label="Latente · F1"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".ui.LibraryActivity"
+            android:exported="true"
+            android:label="Latente · negativos"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".ui.ViewfinderActivity"
+            android:exported="true"
+            android:label="Latente · visor"
+            android:screenOrientation="portrait" />
+    </application>
+</manifest>

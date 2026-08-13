@@ -1,0 +1,32 @@
+Terceira ronda ao protótipo Latente. A 4:3, os campos falsos removidos, o ecrã de objectiva fixa e o
+par DISPARO/VISOR ficaram certos. Seis correcções.
+
+1. O ANEL PRECISA DE SEIS POSIÇÕES, NÃO QUATRO. Tem FOCUS, KELVIN, TINT, EXP.COMP — faltam TEMPO e
+ISO. Sem elas os modos M e S não têm com que se operar: em M o utilizador escolhe tempo e ISO, em S
+escolhe o tempo. Desenha as seis, e desenha também como o ecrã mostra QUEM decide cada parâmetro no
+modo activo: o que é escolha do utilizador e o que é o fotómetro a decidir têm de se distinguir de
+relance.
+
+2. O MODO A NÃO EXISTE NESTE CORPO. As objectivas têm abertura fixa (f/1.8 e f/2.2); A e P dão o mesmo
+resultado. Propõe: retirar o A, ou mostrá-lo desactivado com a razão à vista. Não inventes um controlo
+de abertura.
+
+3. TEXTO ERRADO NA RECEITA. "ROLLOFF: SOFT" — é um número de 0 a 1, não um nome. "EV COMPENSATION" na
+receita — são coisas diferentes: a compensação desloca o alvo do fotómetro ANTES do disparo; a receita
+tem "EV de revelação", aplicado DEPOIS ao ficheiro. Confundi-las põe a mesma luz duas vezes. Trata-as
+como campos separados e com nomes separados.
+
+4. MAIS TRÊS QUE PROMETEM O QUE NÃO FAZEMOS. "HIST (GREEN LOG)": o histograma é linear, não
+logarítmico. "DIGITAL GAIN +12dB": a aplicação fala em stops e em ISO, não em dB. "DNG VER 1.4
+COMPLIANT": não temos como o provar, e um selo que não se prova é o que este projeto existe para não
+ter. Remove os três.
+
+5. FOCO EM METROS. Mostras "0.25 D". Dioptrias é a unidade da máquina; metros é o que se confere
+contra o mundo. Metros grande, dioptrias pequeno ao lado, se quiseres.
+
+6. LÍNGUA: PORTUGUÊS EUROPEU. A aplicação está toda em português; o desenho está em inglês. Passa
+tudo — etiquetas, avisos, estados.
+
+Duas restrições medidas no telefone real: o bloco de telemetria cresce PARA CIMA quando aparece um
+aviso, e não pode passar por trás dos botões; e a linha de cada negativo na lista tem de caber com
+três etiquetas sem cortar texto.

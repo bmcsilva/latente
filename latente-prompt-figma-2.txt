@@ -1,0 +1,18 @@
+Revisão do protótipo LATENTE. Mantém tudo o resto — o desenho está bom e o anel rotativo resolveu o problema dos controlos. Corrige só isto.
+
+1. FORMATO, e é o mais importante. As imagens do visor foram geradas em 16:9 e 9:16. O sensor é 4:3 (4080×3060). Regenera as imagens em 4:3 e volta a dispor o chrome em volta da área real: num ecrã 1080×2340 a imagem inteira ocupa 1080×1440, e sobram 900 px de barras. É mais espaço do que o desenho assume, e tudo se reposiciona.
+
+2. REMOVER, porque a aplicação não pode preencher e inventar campos é o oposto do produto:
+- SENSOR TEMPERATURE — o Camera2 não a expõe neste dispositivo.
+- Corte por canal R/G/B e PER-CHANNEL SPECTRUM — o fotómetro mede só o verde, por desenho: se o vermelho entrasse, a exposição mudaria com a cor do assunto.
+- DEVELOPMENT CURVE: LOG_SENS_V2 e SHADOW DEVIATION — não existe curva de revelação. Uma curva com nome implica processamento que não fazemos.
+
+3. A RECEITA no ecrã de análise tem estes campos e só estes: compensação em EV, temperatura em K, tinta, força da vinhetagem em %, rolloff, espaço de saída (sRGB). É o que reproduz a revelação ao bit.
+
+4. TEXTO: "KELDVIN" → "KELVIN". E "ISO 100" → a base deste sensor é 25; usa 25, 640 ou 3200 nos mockups.
+
+5. ESTADO NOVO a desenhar: a segunda objectiva (14 mm f/2.2) NÃO tem foco controlável. Nesse caso o anel não tem posição de foco e a telemetria diz FOCO FIXO em vez de uma distância. Mostra como o anel fica com três posições em vez de quatro.
+
+6. PERGUNTA: hoje as ajudas são exclusivas — zebras, histograma ou nível, uma de cada vez, porque partilham um botão. Devem poder combinar-se? Se sim, desenha como.
+
+Entrega: o visor em 4:3 nos cinco estados, a análise sem os campos removidos, e o caso da objectiva de foco fixo.

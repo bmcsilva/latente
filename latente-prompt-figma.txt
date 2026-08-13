@@ -1,0 +1,24 @@
+UI de uma app Android, LATENTE: câmara manual que grava RAW sem processamento nenhum — sem beautify, nitidez auto, redução de ruído, HDR nem fusão de frames. O visor mostra o resultado do pipeline da app, não do fabricante. Ergonomia: Sony α7 III. Princípio: nunca prometer mais do que o telefone dá, e dizer o que o sistema fez pelas costas.
+
+NÃO desenhar: filtros, modos de cena, HDR, desfoque simulado, IA, molduras, partilha social — são o oposto do produto.
+
+Restrições medidas:
+- visor a 19–29 fps, limitado pela câmara: sem animações a 60 fps sobre a imagem
+- sensor 4:3 em ecrã 1080×2340, retrato, uma mão
+- a imagem NUNCA se corta: inteira com barras, e sobra espaço acima e abaixo para controlos
+- exposição até 1,8 s: um disparo pode levar 2 s
+- uma só abertura, f/1,8: um controlo de abertura seria decorativo, A e P coincidem, e diz-se
+- ISO 25–3200, analógico só até 640: acima é ganho digital e tem de parecer outra coisa
+- foco de 10 cm a infinito, controlado em dioptrias
+
+Sempre visível: margem até ao corte em EV e % já cortada — corte do SENSOR, o que se perde para sempre; modo, tempo, ISO, foco, Kelvin, tinta. Em cena escura o visor trava em 1/8 s e compensa com ganho: mostrar AS DUAS exposições — "disparo 1,8 s · visor 1/8 s +4,6 EV" — nunca esconder a diferença.
+
+Ajudas ligáveis, que nunca ficam no ficheiro: realce de foco, zebras sobre o corte do sensor, histograma do verde do sensor em log, nível.
+
+Problema a resolver: há mais parâmetros contínuos (foco, Kelvin, tinta, compensação) do que espaço. Hoje: um comando com selector, como o anel de uma máquina.
+
+Negativos: uma linha por FOTOGRAFIA, não por ficheiro — DNG imutável, receita que repete a revelação ao bit, e cópia TIFF 16 bits que pode não existir. Tocar abre a análise.
+
+Tom: instrumento, não aparelho de consumo. Escuro, números mais que ícones, sem competir com a imagem.
+
+Entregar: visor normal; em cena escura; com cada ajuda; negativos; análise; e a solução para os controlos contínuos.
