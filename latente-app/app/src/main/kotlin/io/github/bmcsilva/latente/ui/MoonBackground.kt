@@ -35,7 +35,14 @@ class MoonBackground(
      * direita. É a mesma forma espelhada, e é por isso que se constrói uma e se vira, em vez de haver
      * duas contas parecidas a poderem divergir.
      */
-    private val mordidaAEsquerda: Boolean = true,
+    /**
+     * De que lado entra a mordida: 1 esquerda, 2 direita, 3 topo, 4 base.
+     *
+     * O topo e a base existem para a paisagem, onde o disparador tem os botões **acima e abaixo** e não
+     * aos lados. Constrói-se sempre a mordida à esquerda e roda-se o caminho: uma forma e quatro
+     * matrizes, em vez de quatro contas parecidas a poderem divergir.
+     */
+    private val lado: Int = 1,
     /**
      * O triângulo de «abre lista», desenhado no fundo e **não escrito no texto**.
      *
@@ -63,7 +70,24 @@ class MoonBackground(
     }
 
     override fun onBoundsChange(bounds: android.graphics.Rect) {
-        construir(bounds.width().toFloat(), bounds.height().toFloat())
+        val w = bounds.width().toFloat()
+        val h = bounds.height().toFloat()
+        // Vertical: constrói-se na caixa trocada e roda-se noventa graus. A mordida da esquerda passa a
+        // ser a do topo ou a da base, conforme o sentido da rotação.
+        if (lado == 3 || lado == 4) {
+            construir(h, w)
+            val m = android.graphics.Matrix()
+            if (lado == 3) {
+                m.setRotate(90f)
+                m.postTranslate(w, 0f)
+            } else {
+                m.setRotate(-90f)
+                m.postTranslate(0f, h)
+            }
+            caminho.transform(m)
+        } else {
+            construir(w, h)
+        }
     }
 
     private fun construir(w: Float, h: Float) {
@@ -83,16 +107,37 @@ class MoonBackground(
             caminho.addRoundRect(oval, r, r, Path.Direction.CW)
             return
         }
-        val raio = Math.max(raioDaMordida, altura / 2f + 1f)
+        // **Entalhe, e não aresta inteira.**
+        //
+        // A primeira versão fazia o arco atravessar a aresta de uma ponta à outra, e isso obriga o raio a
+        // ser maior do que metade dela. Numa aresta de 80 dp com o raio de 39 do disparador era
+        // impossível: o `asin` saturava, o arco degenerava num semicírculo, saía da caixa e era cortado —
+        // a aresta aparecia recta.
+        //
+        // Aqui o arco vive só onde o círculo entra de facto no botão, e o resto da aresta fica a direito.
+        // Assim a curva **é** a do disparador — mesmo raio — em arestas de qualquer comprimento, e a
+        // mordida fica igual em retrato e em paisagem, que é o que se quer: o encaixe é o mesmo.
+        val raio = raioDaMordida
         val cx = profundidade + meia - raio
         val cy = h / 2f
-        // O ângulo onde esse círculo cruza o topo e a base do botão.
-        val seno = Math.min(1.0, (altura / 2f) / raio.toDouble())
-        val a = Math.toDegrees(Math.asin(seno)).toFloat()
-
+        // Onde o círculo cruza a aresta, e até onde o arco vai. Limitado à aresta: se o círculo for
+        // maior do que ela, o entalhe passa a ocupá-la toda, que é o caso do retrato.
+        val meiaCorda = if (raio > Math.abs(cx)) {
+            Math.min(Math.sqrt((raio * raio - cx * cx).toDouble()).toFloat(), altura / 2f)
+        } else {
+            0f
+        }
         oval.set(cx - raio, cy - raio, cx + raio, cy + raio)
-        // Do topo para a base pelo lado direito do círculo: é a curva que entra no botão.
-        caminho.arcTo(oval, -a, 2f * a, true)
+        caminho.moveTo(meia, topo)
+        if (meiaCorda > 0f) {
+            caminho.lineTo(meia, cy - meiaCorda)
+            val a = Math.toDegrees(
+                Math.atan2(meiaCorda.toDouble(), (meia - cx).toDouble())).toFloat()
+            caminho.arcTo(oval, -a, 2f * a)
+            caminho.lineTo(meia, base)
+        } else {
+            caminho.lineTo(meia, base)
+        }
 
         caminho.lineTo(direita - r, base)
         oval.set(direita - 2f * r, base - 2f * r, direita, base)
@@ -102,7 +147,7 @@ class MoonBackground(
         caminho.arcTo(oval, 0f, -90f)
         caminho.close()
 
-        if (!mordidaAEsquerda) {
+        if (lado == 2) {
             val espelho = android.graphics.Matrix()
             espelho.setScale(-1f, 1f, w / 2f, 0f)
             caminho.transform(espelho)
@@ -110,7 +155,7 @@ class MoonBackground(
     }
 
     override fun draw(canvas: Canvas) {
-        if (caminho.isEmpty) construir(bounds.width().toFloat(), bounds.height().toFloat())
+        if (caminho.isEmpty) onBoundsChange(bounds)
         canvas.drawPath(caminho, tintaDeFundo)
         if (espessura > 0f) canvas.drawPath(caminho, tintaDoContorno)
         if (corDoAcento == 0) return
@@ -120,7 +165,7 @@ class MoonBackground(
         val lado = h * 0.085f
         // Do lado que a mordida não come. Encostado, mas não na borda: um triângulo colado ao contorno
         // lê-se como defeito do contorno.
-        val cx = if (mordidaAEsquerda) w - lado * 2.2f else lado * 2.2f
+        val cx = w - lado * 2.2f
         val cy = h / 2f
         acento.reset()
         acento.moveTo(cx - lado, cy - lado * 0.55f)

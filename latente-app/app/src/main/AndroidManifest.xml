@@ -40,6 +40,6 @@
             android:name=".ui.ViewfinderActivity"
             android:exported="true"
             android:label="Latente · visor"
-            android:screenOrientation="portrait" />
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden" />
     </application>
 </manifest>

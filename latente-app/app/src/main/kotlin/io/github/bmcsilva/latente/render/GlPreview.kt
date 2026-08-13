@@ -199,6 +199,13 @@ class GlPreview(
         rotation: Int,
         peaking: Float = 0f,
         zebras: Boolean = false,
+        /**
+         * Encostar a imagem ao topo em vez de a centrar.
+         *
+         * Em paisagem sobra uma banda de preto acima e abaixo, e ela vale mais toda junta por baixo:
+         * assim há um sítio onde pôr coisas, em vez de dois sítios onde não cabe nada.
+         */
+        aoTopo: Boolean = false,
     ) {
         if (apresentacao == 0) throw GlFalha("o visor não foi arrancado com superfície")
 
@@ -210,6 +217,7 @@ class GlPreview(
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, alvo)
 
         val enquadramento = Present.fit(viewWidth, viewHeight, width, height, rotation)
+        if (aoTopo) enquadramento[3] = 0f
         GLES20.glUniform1i(uImagem, 0)
         GLES20.glUniform2i(uAlvo, viewWidth, viewHeight)
         GLES20.glUniform2f(uEscala, enquadramento[0], enquadramento[1])

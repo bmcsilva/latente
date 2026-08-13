@@ -2061,6 +2061,65 @@ O instrumento saiu depois de servir.
 **O projeto passou a estar em git** — `github.com/bmcsilva/latente`, e o trabalho passou a fazer-se no
 clone para tudo ficar versionado.
 
+### O layout de paisagem, especificado pelo utilizador
+
+O primeiro ensaio foi reagrupar as faixas do retrato numa coluna, e não chegou: as etiquetas quebravam,
+o `vinh ok · fps` encavalitava no `cortado`, a fila dos menus ficava cortada em baixo, e as meias-luas
+abraçavam o vazio depois de o disparador ir para o bordo. **Não é reflowar, é outra disposição** — foi o
+utilizador a dizê-lo e a desenhá-la.
+
+O esquema a seguir, com as peças que já existem:
+
+- **Visor à esquerda, altura total**, em rectângulo de cantos redondos com contorno fino.
+- **Coluna à direita**, e nela por esta ordem:
+  1. Bloco de dois por dois: `modo` / `cortado` na primeira linha, `margem` / `vinh ok · fps` na
+     segunda. O botão **`ajudas` no canto superior direito** da coluna, e não numa fila em baixo.
+  2. A linha de aviso com uma **barra vertical de acento** antes do texto.
+  3. A grelha em **duas colunas por três linhas** — `tempo`/`abertura`, `iso`/`foco`, `temp.`/`tinta` —
+     e não três por duas: é o que dá largura para as etiquetas não quebrarem.
+  4. O **disparador no bordo direito**, à altura do meio da coluna. Já está feito.
+  5. A barra do parâmetro, mais estreita.
+  6. As pastilhas em duas filas de três, com os botões **`M` e `23 mm` encostados à direita**,
+     alinhados com as duas filas.
+- **Etiquetas em minúsculas** e mais pequenas do que no retrato.
+
+O que isto obriga, e é a razão de não ser um ajuste: o bloco do topo e a grelha são construídos uma vez
+no `onCreate` e passam a ter de ser **reconstruídos por orientação**, como já acontece com as
+pastilhas. As meias-luas voltam a pastilhas normais em paisagem, porque a mordida só faz sentido
+encostada ao disparador.
+
+#### A lua vertical não pode ser rasa: é geometria, não afinação
+
+Pedidas as luas verticais — `AJUDAS` mordido na base, `MODO` no topo — e ficaram **rectas**. Não é
+descuido de valores; é impossível com estes.
+
+A mordida é a negativa de um círculo. Para ela ser **rasa** — 8 dp, como nas horizontais — o raio tem de
+ser muito maior do que metade da aresta mordida. Nas horizontais a aresta é a **altura** do botão,
+44 dp: metade é 22, o raio é 39, e a curva varre 6,8 dp. Cabe.
+
+Nas verticais a aresta é a **largura**, 80 dp: metade é 40, **maior do que o raio de 39**. O círculo do
+disparador não chega de um canto ao outro do botão, o `asin` satura em 1, e o arco degenera num
+semicírculo que sai fora da caixa e é cortado — donde a aresta parecer recta.
+
+As saídas são duas, e excluem-se:
+
+- **Botão da largura do disparador** (76 dp) e mordida **funda**: com raio 41 a curva varre 26 dp, e o
+  botão tem de crescer para uns 58 dp de altura para sobrar texto. Encaixa de verdade no círculo.
+- **Mordida rasa** de 8 dp numa aresta de 68 dp: exige raio 76 dp, ou seja o dobro do círculo. Fica
+  bonito e **deixa de acompanhar o disparador** — é uma curva que não é a dele.
+
+A primeira é a honesta: a lua existe para encaixar, e uma curva que não é a do círculo é decoração.
+
+#### O que a banda por baixo do visor tem de receber
+
+A imagem encostada ao topo já está feita, mas a ideia só rende se a banda que sobra **receber
+controlos**. Neste momento o preto que sobra está na coluna da imagem e a falta de altura está na coluna
+dos comandos — são sítios diferentes, e por isso não se compensam.
+
+Falta: o topo do visor alinhado com a linha do `MODO`, e a **segunda fila de pastilhas por baixo do
+visor**, à largura dele, até ao limite que hoje têm. A banda passa a ser uma quarta zona do ecrã, e não
+sobra.
+
 ### O que falta na UI
 
 1. **Confirmar a rotação** no telefone (acima).
