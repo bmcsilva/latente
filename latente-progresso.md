@@ -2035,31 +2035,17 @@ depois da biblioteca e da análise, senão a decisão de onde vai cada peça tom
 
 ### Estado
 
-**197 testes, 0 falhas.** APK `latente-f6.apk`. Verificados no telefone: o ecrã em faixas, os modos, a
-66 mm, o disparador, as pastilhas com cor por parâmetro, a barra com `−`/`+`, os três menus e a
-meia-lua do modo.
+**197 testes, 0 falhas.** APK `latente-f6.apk`. O projeto está em git —
+`github.com/bmcsilva/latente` — e o trabalho faz-se no clone.
 
-#### A rotação: verificada, e o sinal estava trocado
+Verificado no telefone: o ecrã em faixas, os modos, a 66 mm pela câmara lógica, o disparador, as
+pastilhas com cor por parâmetro, a barra com `−`/`+`, os três menus, a mordida em entalhe nas quatro
+direcções, o arranque com o estado guardado, e **a rotação medida posição a posição** (retrato −2° → Q0 →
+`Orientation 6`; deitado para a esquerda −91° → Q90 → `Orientation 1`).
 
-Medida com o utilizador a segurar o telefone em cada posição, com o ângulo e o quadrante instrumentados
-no rodapé. **Sem o instrumento não havia como decidir**: a captura de ecrã sai no referencial do
-telefone, que está rodado em relação ao que o utilizador vê, e a primeira tentativa foi eu a deduzir da
-captura — e a deduzir mal.
+O layout de paisagem funciona e não está acabado: falta a banda por baixo do visor receber a segunda fila
+de pastilhas, e os três acertos pequenos acima.
 
-| posição | ângulo lido | quadrante | ficheiro |
-|---|---|---|---|
-| retrato | −2° | 0 | `Orientation 6` |
-| deitado para a esquerda | −91° | **90** | **`Orientation 1`** |
-
-**O sinal é o contrário do intuitivo.** O `Present.rotationFor` espera o que o Android chama rotação do
-*ecrã* — quanto o conteúdo tem de rodar para compensar o corpo, e não quanto o corpo rodou. Deitar para
-a esquerda é `ROTATION_90`, e a gravidade nessa posição lê-se a −91 graus. Tinha-os trocados, e
-`(90 − 270 + 360) % 360` dava 180: a fotografia saía de pernas para o ar, com `Orientation 3`.
-
-O instrumento saiu depois de servir.
-
-**O projeto passou a estar em git** — `github.com/bmcsilva/latente`, e o trabalho passou a fazer-se no
-clone para tudo ficar versionado.
 
 ### O layout de paisagem, especificado pelo utilizador
 
@@ -2088,37 +2074,60 @@ no `onCreate` e passam a ter de ser **reconstruídos por orientação**, como j�
 pastilhas. As meias-luas voltam a pastilhas normais em paisagem, porque a mordida só faz sentido
 encostada ao disparador.
 
-#### A lua vertical não pode ser rasa: é geometria, não afinação
+#### A mordida como entalhe, e uma conclusão minha que estava errada
 
-Pedidas as luas verticais — `AJUDAS` mordido na base, `MODO` no topo — e ficaram **rectas**. Não é
-descuido de valores; é impossível com estes.
+Pedidas as luas verticais — `AJUDAS` mordido na base, `MODO` no topo — e ficaram **rectas**.
 
-A mordida é a negativa de um círculo. Para ela ser **rasa** — 8 dp, como nas horizontais — o raio tem de
-ser muito maior do que metade da aresta mordida. Nas horizontais a aresta é a **altura** do botão,
-44 dp: metade é 22, o raio é 39, e a curva varre 6,8 dp. Cabe.
+Diagnostiquei e **concluí mal**: escrevi aqui que uma mordida rasa com o raio do disparador era
+impossível numa aresta larga, e demonstrei-o com contas. As contas estavam certas; a premissa é que não.
+Eu estava a fazer o arco atravessar a aresta **de uma ponta à outra**, e é isso que obriga o raio a ser
+maior do que metade dela — numa aresta de 80 dp com o raio de 39 do disparador, o `asin` saturava, o
+arco degenerava num semicírculo, saía da caixa e era cortado.
 
-Nas verticais a aresta é a **largura**, 80 dp: metade é 40, **maior do que o raio de 39**. O círculo do
-disparador não chega de um canto ao outro do botão, o `asin` satura em 1, e o arco degenera num
-semicírculo que sai fora da caixa e é cortado — donde a aresta parecer recta.
+O utilizador não aceitou a conclusão — «a mordida é para ser tal e qual» — e tinha razão. A mordida não
+precisa de atravessar a aresta: é um **entalhe**. Recto, arco, recto. O arco vive só onde o círculo entra
+de facto no botão e o resto da aresta fica a direito.
 
-As saídas são duas, e excluem-se:
+Com isso a curva **é** a do disparador — mesmo raio — em arestas de qualquer comprimento, e a mordida
+fica igual em retrato e em paisagem porque passou a ser literalmente a mesma conta. Deixou de haver caso
+especial por direcção: uma forma, quatro matrizes.
 
-- **Botão da largura do disparador** (76 dp) e mordida **funda**: com raio 41 a curva varre 26 dp, e o
-  botão tem de crescer para uns 58 dp de altura para sobrar texto. Encaixa de verdade no círculo.
-- **Mordida rasa** de 8 dp numa aresta de 68 dp: exige raio 76 dp, ou seja o dobro do círculo. Fica
-  bonito e **deixa de acompanhar o disparador** — é uma curva que não é a dele.
+Fica registado porque o erro é instrutivo: uma demonstração correcta sobre uma premissa que ninguém
+questionou parece prova. A pergunta que faltava não era «quanto tem de ser o raio», era «porque é que o
+arco atravessa a aresta toda».
 
-A primeira é a honesta: a lua existe para encaixar, e uma curva que não é a do círculo é decoração.
+#### Maiúsculas, e o tamanho em paisagem
 
-#### O que a banda por baixo do visor tem de receber
+As etiquetas passaram a minúsculas seguindo o esquema do utilizador, e voltaram a maiúsculas por decisão
+dele depois de as ver. Não houve mudança de fonte em momento nenhum — as etiquetas são sans-serif e os
+valores monoespaçados, como sempre foram; o que mudou foram as palavras.
+
+Em paisagem os valores estão a 14 sp e as etiquetas a 8, contra 16 e 9 em retrato. É aritmética e não
+gosto: cinco linhas de campos a 16 sp, mais o aviso, a barra e duas filas de pastilhas, pedem 1179 px de
+uma coluna que tem 1080.
+
+#### Os botões flanqueiam o disparador, também em paisagem
+
+Ideia do utilizador. O que em retrato o flanqueia — ajudas de um lado, modo e objectiva do outro — passa
+a flanqueá-lo em coluna, acima e abaixo. É a mesma vizinhança vista de lado, e não uma disposição nova
+para decorar. De caminho tirou três botões da coluna, que era onde faltava altura.
+
+#### O que a banda por baixo do visor tem de receber — a decidir
 
 A imagem encostada ao topo já está feita, mas a ideia só rende se a banda que sobra **receber
 controlos**. Neste momento o preto que sobra está na coluna da imagem e a falta de altura está na coluna
 dos comandos — são sítios diferentes, e por isso não se compensam.
 
 Falta: o topo do visor alinhado com a linha do `MODO`, e a **segunda fila de pastilhas por baixo do
-visor**, à largura dele, até ao limite que hoje têm. A banda passa a ser uma quarta zona do ecrã, e não
-sobra.
+visor**, à largura dele. A banda passa a ser uma quarta zona do ecrã, e não sobra.
+
+E é decisão, não detalhe: a fila de pastilhas passa a viver **fora** da coluna, e a coluna deixa de ter
+as seis num sítio só. Ganha-se altura e perde-se ter tudo junto. A alternativa é encolher o bloco de
+cima, mas aí sai a `margem` ou o `cortado` — e esses decidem a fotografia.
+
+Ficam por acertar, todos diagnosticados: a compensação aparece colada à tinta (`+0.00  -1.1 EV`) por
+falta de largura; o `VINH OK` e o `CORTE NO SENSOR` continuam em maiúsculas porque são construídos no
+fio de render e não no ecrã; e falta a barra de acento antes do aviso.
 
 ### O que falta na UI
 
