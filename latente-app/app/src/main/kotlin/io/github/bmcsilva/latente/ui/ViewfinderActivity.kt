@@ -90,6 +90,15 @@ class ViewfinderActivity : Activity() {
         /** Em retrato a aresta mordida é a altura, 44 dp, e o arco cabe nela com 8 de profundidade. */
         const val LUA_MORDIDA = 8
 
+        /**
+         * Chave para guardar o estado com que um botão foi pintado.
+         *
+         * O `setTag(chave, valor)` exige que o **byte de cima** da chave seja 2 ou mais — a plataforma
+         * chama-lhe «identificador de recurso da aplicação» e recusa o resto com uma excepção. Daí o
+         * número escrito por extenso em vez de um `hashCode`, que passaria hoje e podia falhar amanhã.
+         */
+        const val MARCA_DO_BOTAO = 0x02000001
+
         // As ajudas, em bits: combinam-se, e por isso não são um índice.
         const val AJUDA_PICOS = 1
         const val AJUDA_ZEBRAS = 2
@@ -1420,6 +1429,15 @@ class ViewfinderActivity : Activity() {
      *   sempre a valer alguma coisa, e acendê-los seria acender o ecrã todo.
      */
     private fun rotularBotaoDeMenu(v: TextView, texto: String, aceso: Boolean) {
+        // Nada a fazer se nada mudou.
+        //
+        // A telemetria chama isto uma vez por segundo para o botão do modo, e cada chamada construía
+        // um `MoonBackground` novo — com as suas tintas, caminho e rectângulo — e mandava redesenhar o
+        // botão. É a mesma regra que já governa a fila das pastilhas e a linha dos avisos: só se refaz
+        // o que mudou.
+        val marca = texto + (if (aceso) "+" else "-") + (v.tag as? Int ?: 0)
+        if (v.getTag(MARCA_DO_BOTAO) == marca) return
+        v.setTag(MARCA_DO_BOTAO, marca)
         // O acento é um triângulo **mais pequeno e apagado** do que o nome, e não um caracter do mesmo
         // tamanho ao lado dele. Assim lê-se como marca de «abre lista» e não como parte do valor —
         // «23 MM ⌄» dava a entender que o ⌄ dizia alguma coisa sobre a objectiva.

@@ -44,6 +44,9 @@ object Thumbnails {
      */
     private const val REDUCAO_DA_VISTA = 2
 
+    /** A largura a que a lista mostra a miniatura, em píxeis do mosaico reduzido. */
+    private const val LARGURA_DA_MINIATURA = 255
+
     private fun pasta(ctx: Context): File {
         val p = File(ctx.filesDir, "miniaturas")
         if (!p.exists()) p.mkdirs()
@@ -67,6 +70,13 @@ object Thumbnails {
      */
     fun ensure(ctx: Context, shot: Library.Shot): Bitmap? {
         cached(ctx, shot.baseName)?.let { return it }
+        // Sem negativo, a miniatura sai da cópia revelada.
+        //
+        // Apareceu com o «apagar»: quem apaga o negativo e fica com o JPEG continua a ver a fotografia
+        // na lista, e uma linha com o lugar da imagem vazio ao lado de um JPEG que existe parece
+        // defeito. Não é a nossa revelação — é uma cópia dela —, mas para reconhecer a fotografia
+        // chega, e é tudo o que resta.
+        if (shot.orphan) return daCopia(ctx, shot)
 
         // Prefixo próprio na cache: o botão de revelar traz o mesmo negativo com o nome de sempre, e as
         // duas thread apagavam-se o ficheiro uma à outra a meio da leitura.
@@ -139,6 +149,35 @@ object Thumbnails {
             return null
         } finally {
             dng.delete()
+        }
+    }
+
+    /**
+     * A miniatura tirada do JPEG revelado, para as fotografias que já não têm negativo.
+     *
+     * Com `inSampleSize`: descodificar 12 megapíxeis para mostrar 255 píxeis de largura seriam 48 MB
+     * por linha da lista. A potência de dois mais próxima chega e custa quase nada.
+     */
+    private fun daCopia(ctx: Context, shot: Library.Shot): Bitmap? {
+        val id = shot.jpgId ?: return null
+        val copia = Library.fetch(ctx, id, "mini-" + shot.baseName + ".jpg") ?: return null
+        try {
+            val medida = BitmapFactory.Options()
+            medida.inJustDecodeBounds = true
+            BitmapFactory.decodeFile(copia.absolutePath, medida)
+            val opcoes = BitmapFactory.Options()
+            var passo = 1
+            while (medida.outWidth / (passo * 2) >= LARGURA_DA_MINIATURA) passo *= 2
+            opcoes.inSampleSize = passo
+            val b = BitmapFactory.decodeFile(copia.absolutePath, opcoes) ?: return null
+            ficheiro(ctx, shot.baseName).outputStream().use { out ->
+                b.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            return b
+        } catch (t: Throwable) {
+            return null
+        } finally {
+            copia.delete()
         }
     }
 

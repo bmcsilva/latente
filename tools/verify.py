@@ -34,7 +34,10 @@ def render(dng, tag):
     os.makedirs(os.path.join(WORK, "dtconf"), exist_ok=True)
     src = os.path.join(WORK, "in_%s.dng" % tag)
     out = os.path.join(WORK, "render_%s.jpg" % tag)
-    shutil.copyfile(dng, src)
+    # O darktable não abre um `.zip`, e a aplicação passou a guardar os negativos assim. Extrai-se
+    # para o directório de trabalho, que é para onde o negativo ia de qualquer maneira.
+    with open(src, "wb") as fh:
+        fh.write(dngcheck.ler_negativo(dng))
     if os.path.exists(out):
         os.remove(out)
 

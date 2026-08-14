@@ -21,18 +21,26 @@ object RgbBitmap {
      * leva, continua a ser o caminho certo para arquivo.
      */
     fun encode(linear: Rgb): Bitmap {
-        val pixels = IntArray(linear.width * linear.height)
+        // **Linha a linha**, e não a imagem toda num `IntArray`.
+        //
+        // Numa revelação de 12 megapíxeis o vector inteiro são 48 MB, que se somavam aos 150 MB do
+        // linear e aos 48 do `Bitmap` — 250 MB de pico para escrever um JPEG. Com uma linha de cada
+        // vez o vector passa a 16 kB e o pico desce 48 MB, que num sítio onde já houve falta de
+        // memória não é pouco.
+        val bitmap = Bitmap.createBitmap(linear.width, linear.height, Bitmap.Config.ARGB_8888)
+        val linha = IntArray(linear.width)
         var i = 0
-        var o = 0
-        while (o < pixels.size) {
-            val r = (ColorScience.srgbEncode(linear.data[i].toDouble()) * 255.0 + 0.5).toInt()
-            val g = (ColorScience.srgbEncode(linear.data[i + 1].toDouble()) * 255.0 + 0.5).toInt()
-            val b = (ColorScience.srgbEncode(linear.data[i + 2].toDouble()) * 255.0 + 0.5).toInt()
-            pixels[o] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
-            i += 3
-            o++
+        for (y in 0 until linear.height) {
+            for (x in 0 until linear.width) {
+                val r = (ColorScience.srgbEncode(linear.data[i].toDouble()) * 255.0 + 0.5).toInt()
+                val g = (ColorScience.srgbEncode(linear.data[i + 1].toDouble()) * 255.0 + 0.5).toInt()
+                val b = (ColorScience.srgbEncode(linear.data[i + 2].toDouble()) * 255.0 + 0.5).toInt()
+                linha[x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+                i += 3
+            }
+            bitmap.setPixels(linha, 0, linear.width, 0, y, linear.width, 1)
         }
-        return Bitmap.createBitmap(pixels, linear.width, linear.height, Bitmap.Config.ARGB_8888)
+        return bitmap
     }
 
     /**

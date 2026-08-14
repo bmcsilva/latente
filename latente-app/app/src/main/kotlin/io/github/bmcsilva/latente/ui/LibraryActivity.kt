@@ -65,6 +65,14 @@ class LibraryActivity : Activity() {
      */
     private val fioDasMiniaturas = Executors.newSingleThreadExecutor()
 
+    override fun onDestroy() {
+        super.onDestroy()
+        // Dois fios por cada vez que este ecrã abre, e o processo é o mesmo: sem isto ficavam a
+        // acumular threads paradas até a aplicação morrer.
+        worker.shutdown()
+        fioDasMiniaturas.shutdown()
+    }
+
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         // Sem a barra do sistema, como no visor: uma faixa cinzenta a dizer «Latente · negativos» por
@@ -493,6 +501,10 @@ class LibraryActivity : Activity() {
                 }
                 resumo = nome + " escrito · " + settings.kelvin + " K · " +
                         String.format(java.util.Locale.US, "%+.2f EV", settings.exposureEv)
+                // O negativo veio para a cache para se poder ler às saltas, e sai de lá agora: são
+                // 24 MB por revelação, e ficavam a acumular num telefone onde o espaço é o problema
+                // que estamos a tentar resolver.
+                dng.delete()
             } catch (t: Throwable) {
                 resumo = "falhou: " + t.javaClass.simpleName + ": " + (t.message ?: "")
             }

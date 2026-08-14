@@ -142,7 +142,13 @@ object Library {
 
     /** A receita, do `.json` solto ou de dentro do arquivo. Nula quando não há. */
     fun receita(ctx: Context, shot: Shot, prefixo: String = ""): String? {
-        shot.jsonId?.let { return fetch(ctx, it, prefixo + shot.baseName + ".json")?.readText() }
+        shot.jsonId?.let { id ->
+            val f = fetch(ctx, id, prefixo + shot.baseName + ".json") ?: return null
+            val texto = f.readText()
+            // Lida, sai da cache: são quatro quilobytes, mas um por fotografia e por visita.
+            f.delete()
+            return texto
+        }
         val zip = shot.zipId?.let { fetch(ctx, it, prefixo + shot.baseName + ".zip") } ?: return null
         val texto = Archive.lerReceita(zip)
         zip.delete()

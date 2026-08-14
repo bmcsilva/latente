@@ -2421,6 +2421,40 @@ revelações que sobram têm de continuar à vista para se poderem apagar també
 algo». Antes desapareciam da lista e ficavam no disco a ocupar espaço sem aparecerem em lado nenhum,
 que é a pior maneira de ocupar espaço.
 
+### Auditoria: memória, escrita e limpeza
+
+Passagem pelos caminhos que alocam, com as contas feitas em vez de impressões. O laço do visor está
+limpo — o `upload` usa o buffer da própria imagem, sem cópia, e por frame só se aloca o vector de
+quatro floats do enquadramento. O que tinha problemas era a revelação.
+
+**Pico de memória de uma revelação de 12 megapíxeis**, antes: mosaico 50 MB + linear 150 MB = 200 MB, e
+no caminho do JPEG mais 48 do vector de píxeis e 48 do `Bitmap` — **250 MB**. O `RgbBitmap.encode`
+passou a construir o bitmap **linha a linha**: o vector desce de 48 MB para 16 kB e o pico baixa 48 MB.
+O escritor de TIFF já escrevia linha a linha e ficou como estava.
+
+**Escrita em blocos de 512 bytes.** O `ZipOutputStream` da plataforma tem esse buffer por omissão, e um
+negativo de 24 MB dava quarenta e oito mil escritas ao `MediaStore`. O `MediaStoreOut` passou a
+embrulhar tudo em 64 kB — trezentas e oitenta escritas —, e vale para todos os escritores: DNG, TIFF,
+JPEG, JSON e arquivo.
+
+**Ficheiros esquecidos na cache.** Revelar trazia o negativo para a cache e não o apagava: 24 MB por
+revelação a acumular, precisamente no telefone onde o espaço é o problema que estamos a resolver. A
+receita fazia o mesmo com 4 kB. Ambos saem agora depois de lidos; as miniaturas já limpavam atrás de si.
+
+**Dois fios por cada abertura da biblioteca**, e nenhum fechado — `shutdown` no `onDestroy`.
+
+**Um `MoonBackground` novo por segundo.** A telemetria repintava o botão do modo a cada relato, e cada
+repintura construía tintas, caminho e rectângulo e mandava redesenhar. Passou a repintar só quando o
+texto, o estado ou o lado da mordida mudam — a mesma regra que já governa a fila das pastilhas e a linha
+dos avisos.
+
+**A miniatura das órfãs.** O «apagar o negativo» deixou fotografias com JPEG e sem miniatura, e uma
+linha com o lugar da imagem vazio ao lado de um JPEG que existe parece defeito. Agora sai da cópia, com
+`inSampleSize` — descodificar 12 megapíxeis para mostrar 255 seriam 48 MB por linha da lista.
+
+Ficou por medir no telefone, que se desligou: o pico real durante uma revelação (`dumpsys meminfo`) e o
+tempo do disparo antes e depois do buffer de escrita.
+
 ### O instrumento do uso prolongado
 
 Feito, por medir. Regista de dez em dez segundos: minuto desde o arranque, bateria em percentagem e o

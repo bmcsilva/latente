@@ -34,8 +34,14 @@ class MediaStoreOut(private val ctx: Context) {
         try {
             resolver.openOutputStream(uri).use { out ->
                 if (out == null) throw IllegalStateException("sem stream de escrita para $name")
-                body(out)
-                out.flush()
+                // **Com buffer**, e não directo ao ficheiro.
+                //
+                // O `ZipOutputStream` da plataforma escreve em blocos de 512 bytes: um negativo de
+                // 24 MB dava quarenta e oito mil escritas ao `MediaStore`. Com 64 kB são trezentas e
+                // oitenta. Fica aqui e não em cada escritor porque são todos: DNG, TIFF, JPEG, JSON.
+                val comBuffer = java.io.BufferedOutputStream(out, 1 shl 16)
+                body(comBuffer)
+                comBuffer.flush()
             }
         } catch (t: Throwable) {
             resolver.delete(uri, null, null)
