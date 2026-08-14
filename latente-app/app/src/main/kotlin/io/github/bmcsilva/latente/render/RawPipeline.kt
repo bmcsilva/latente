@@ -67,8 +67,16 @@ object RawPipeline {
         reader: DngReader,
         profile: ShadingProfile?,
         settings: DevelopSettings = DevelopSettings(),
+        /**
+         * Um quadrado do mosaico em cada `reducao`, para miniaturas. Um é o ficheiro inteiro.
+         *
+         * O resto do pipeline não sabe que houve redução, e é de propósito: a vinhetagem mede o raio
+         * pelo tamanho do mosaico que recebe, o `demosaicing` só olha para vizinhos, e a cor é por
+         * píxel. Uma miniatura sai assim da **mesma revelação** que o TIFF, e não de outra parecida.
+         */
+        reducao: Int = 1,
     ): Rgb {
-        val mosaic = reader.readMosaic()
+        val mosaic = reader.readMosaicReduced(reducao)
 
         if (profile != null && settings.shadingStrength > 0f) {
             LensShading.correct(mosaic, profile, settings.shadingStrength)

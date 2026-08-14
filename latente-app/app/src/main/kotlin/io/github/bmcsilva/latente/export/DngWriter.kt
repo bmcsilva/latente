@@ -63,17 +63,35 @@ object DngWriter {
         var written = 0L
         val out = MediaStoreOut(ctx)
         val uri = out.write(name, "image/x-adobe-dng") { stream ->
-            val creator = DngCreator(ch, result)
-            try {
-                creator.setOrientation(orientation)
-                creator.setDescription(ascii(description))
-                creator.writeImage(stream, image)
-            } finally {
-                creator.close()
-            }
+            escrever(ch, result, image, description, orientation, stream)
             // 2 bytes por pixel, sem compressão
             written = image.width.toLong() * image.height * 2
         }
         return Result(uri, written, null)
+    }
+
+    /**
+     * O negativo para um fluxo qualquer, sem saber onde ele acaba.
+     *
+     * Existe para o arquivo poder pôr o DNG **dentro de um zip** sem que nada disto mude: os mesmos
+     * pedidos ao `DngCreator`, pela mesma ordem, com os mesmos metadados. O que muda é o destino, e o
+     * destino nunca foi assunto do negativo.
+     */
+    fun escrever(
+        ch: CameraCharacteristics,
+        result: TotalCaptureResult,
+        image: Image,
+        description: String,
+        orientation: Int,
+        stream: java.io.OutputStream,
+    ) {
+        val creator = DngCreator(ch, result)
+        try {
+            creator.setOrientation(orientation)
+            creator.setDescription(ascii(description))
+            creator.writeImage(stream, image)
+        } finally {
+            creator.close()
+        }
     }
 }

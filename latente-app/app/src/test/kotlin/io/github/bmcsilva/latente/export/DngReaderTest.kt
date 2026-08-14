@@ -233,6 +233,60 @@ class DngReaderTest {
     }
 
     @Test
+    fun reducingByOneReadsTheWholeMosaic() {
+        val f = escreverDng(IntArray(largura * altura) { it * 10 })
+        val inteiro = DngReader.open(f).readMosaic()
+        val reduzido = DngReader.open(f).readMosaicReduced(1)
+        assertEquals(inteiro.width, reduzido.width)
+        assertEquals(inteiro.height, reduzido.height)
+        for (i in inteiro.data.indices) {
+            assertEquals("pixel $i", inteiro.data[i], reduzido.data[i], 0f)
+        }
+    }
+
+    /**
+     * O que distingue esta redução de um salto de dois em dois: leva **quadrados inteiros**.
+     *
+     * Saltar píxeis daria um mosaico com uma cor só — todas as amostras na mesma posição do CFA. Aqui
+     * as quatro posições vêm todas, e na mesma ordem, que é o que deixa o `demosaicing` correr a
+     * seguir sem saber que houve redução.
+     */
+    @Test
+    fun theReducedMosaicTakesWholeQuads() {
+        val f = escreverDng(IntArray(largura * altura) { it * 10 })
+        // 8×6 reduzido a 2: passo de quatro colunas e quatro linhas, dois quadrados numa fila.
+        val m = DngReader.open(f).readMosaicReduced(2)
+        assertEquals(4, m.width)
+        assertEquals(2, m.height)
+        val esperado = intArrayOf(
+            0, 1, 4, 5,
+            largura, largura + 1, largura + 4, largura + 5)
+        for (i in esperado.indices) {
+            assertEquals("amostra $i", esperado[i] * 10 / 1023f, m.data[i], 1e-5f)
+        }
+        // E o padrão do CFA atravessa intacto: o mesmo canto, as mesmas quatro cores.
+        assertEquals(Demosaic.G, m.colourAt(0, 0))
+        assertEquals(Demosaic.B, m.colourAt(1, 0))
+        assertEquals(Demosaic.R, m.colourAt(0, 1))
+        assertEquals(Demosaic.G, m.colourAt(1, 1))
+    }
+
+    @Test
+    fun theReducedMosaicSubtractsTheBlackLevelOfTheRightCfaPosition() {
+        val preto = intArrayOf(10, 20, 30, 40)
+        val f = escreverDng(IntArray(largura * altura) { 500 }, black = preto)
+        val m = DngReader.open(f).readMosaicReduced(2)
+        for (y in 0 until m.height) {
+            for (x in 0 until m.width) {
+                // A coluna de origem do quadrado da direita é a 4, e 4 é par: a paridade é a mesma.
+                val p = preto[(y and 1) * 2 + (x and 1)]
+                val esperado = (500f - p) / (1023f - p)
+                assertEquals("em ($x,$y)", esperado, m.data[y * m.width + x], 1e-5f)
+            }
+        }
+    }
+
+    @Test
     fun rejectsSomethingThatIsNotATiff() {
         val f = pasta.newFile("lixo.dng")
         f.writeBytes(ByteArray(64) { 7 })

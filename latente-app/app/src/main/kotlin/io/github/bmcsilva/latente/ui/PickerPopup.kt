@@ -50,12 +50,17 @@ object PickerPopup {
     /**
      * @param multipla o menu fica aberto entre escolhas. Para as ajudas, que se combinam; as
      *   objectivas e os modos escolhem-se uma vez e o menu fecha.
+     * @param estaActiva num menu de escolha múltipla, quem sabe o estado de cada opção **depois** da
+     *   escolha. Sem isto o menu não tinha como se actualizar, e quem chamava resolvia-o a reabri-lo —
+     *   que empilhava uma janela nova por cima da velha. Com quatro ajudas ligadas ficavam cinco
+     *   janelas, e cinco toques para as fechar. O menu passa a repintar-se onde está.
      */
     fun mostrar(
         act: Activity,
         ancora: View,
         opcoes: List<Opcao>,
         multipla: Boolean,
+        estaActiva: ((Int) -> Boolean)? = null,
         aoEscolher: (Int) -> Unit,
     ) {
         val d = act.resources.displayMetrics.density
@@ -67,14 +72,17 @@ object PickerPopup {
         val moldura = GradientDrawable()
         moldura.cornerRadius = dp(14).toFloat()
         moldura.setColor(FUNDO)
-        moldura.setStroke(dp(1), 0xFF33383E.toInt())
+        moldura.setStroke(dp(1), Palette.CONTORNO)
         painel.background = moldura
 
         val janela = PopupWindow(painel,
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true)
 
+        // Cada linha deixa aqui a sua maneira de se repintar, e uma escolha repinta-as todas: mudar uma
+        // ajuda pode mudar o que outra diz, e a lista é de quatro.
+        val repintar = ArrayList<() -> Unit>()
         for (o in opcoes) {
-            painel.addView(linha(act, o, janela, multipla, aoEscolher),
+            painel.addView(linha(act, o, janela, multipla, estaActiva, repintar, aoEscolher),
                 LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
         }
 
@@ -96,6 +104,8 @@ object PickerPopup {
         o: Opcao,
         janela: PopupWindow,
         multipla: Boolean,
+        estaActiva: ((Int) -> Boolean)?,
+        repintar: ArrayList<() -> Unit>,
         aoEscolher: (Int) -> Unit,
     ): View {
         val d = act.resources.displayMetrics.density
@@ -105,26 +115,32 @@ object PickerPopup {
         caixa.orientation = LinearLayout.VERTICAL
         caixa.gravity = Gravity.CENTER_VERTICAL
         caixa.setPadding(dp(14), 0, dp(14), 0)
-        if (o.activa) {
-            val realce = GradientDrawable()
-            realce.cornerRadius = dp(9).toFloat()
-            realce.setColor(0xFF23282D.toInt())
-            caixa.background = realce
-        }
+
+        val realce = GradientDrawable()
+        realce.cornerRadius = dp(9).toFloat()
 
         val t = TextView(act)
-        // O ponto aceso à frente do nome diz o estado sem depender da cor de fundo, que num menu
-        // pequeno se lê mal.
-        t.text = (if (o.activa) "● " else "○ ") + o.texto
-        t.setTextColor(when {
-            !o.disponivel -> 0xFF5F6368.toInt()
-            o.activa -> ACESO
-            else -> Color.WHITE
-        })
         t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
         t.typeface = Typeface.MONOSPACE
         t.maxLines = 1
         caixa.addView(t)
+
+        // O estado da linha num sítio só, para ser o mesmo ao abrir e depois de cada escolha.
+        val pintar = {
+            val activa = estaActiva?.invoke(o.id) ?: o.activa
+            realce.setColor(if (activa) 0xFF23282D.toInt() else Color.TRANSPARENT)
+            caixa.background = realce
+            // O ponto aceso à frente do nome diz o estado sem depender da cor de fundo, que num menu
+            // pequeno se lê mal.
+            t.text = (if (activa) "● " else "○ ") + o.texto
+            t.setTextColor(when {
+                !o.disponivel -> 0xFF5F6368.toInt()
+                activa -> ACESO
+                else -> Color.WHITE
+            })
+        }
+        pintar()
+        repintar.add(pintar)
 
         o.detalhe?.let {
             val sub = TextView(act)
@@ -138,7 +154,11 @@ object PickerPopup {
         if (o.disponivel) {
             caixa.setOnClickListener {
                 aoEscolher(o.id)
-                if (!multipla) janela.dismiss()
+                if (multipla) {
+                    for (p in repintar) p()
+                } else {
+                    janela.dismiss()
+                }
             }
         }
         return caixa

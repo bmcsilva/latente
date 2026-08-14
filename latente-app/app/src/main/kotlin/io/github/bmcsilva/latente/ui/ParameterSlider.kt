@@ -66,7 +66,7 @@ class ParameterSlider(ctx: Context) : View(ctx) {
     private var repeticao: Runnable? = null
 
     init {
-        tintaDoFundo.color = 0xFF1F2226.toInt()
+        tintaDoFundo.color = Palette.PASTILHA
         tintaDaCalha.color = 0xFF3A3F45.toInt()
         tintaDoNivel.color = 0xFF00FFF2.toInt()
         tintaDoSinal.color = 0xFFE8EAED.toInt()

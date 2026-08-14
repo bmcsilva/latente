@@ -53,8 +53,12 @@ class AspectBox(ctx: Context) : FrameLayout(ctx) {
         } else {
             Math.min(pedida, Math.max(MeasureSpec.getSize(alturaSpec) - folgaEmBaixo, 0))
         }
-        val spec = MeasureSpec.makeMeasureSpec(altura, MeasureSpec.EXACTLY)
-        super.onMeasure(larguraSpec, spec)
+        // A largura fica como veio. Chegou a encolher também em largura quando era a altura a mandar,
+        // para a coluna dos instrumentos ficar com o preto que sobrava dos lados — e o que isso fez foi
+        // desalinhar as pastilhas da imagem e estreitar o visor, que o utilizador tinha aprovado como
+        // estava. O preto de cada lado é de poucos dp e o `Present.fit` centra a imagem nele.
+        super.onMeasure(
+            larguraSpec, MeasureSpec.makeMeasureSpec(altura, MeasureSpec.EXACTLY))
         setMeasuredDimension(largura, altura)
     }
 }

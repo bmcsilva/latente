@@ -68,6 +68,61 @@ class DngReader private constructor(
     }
 
     /**
+     * O mesmo mosaico, mas **um quadrado em cada `reducao`**, para quem só quer uma miniatura.
+     *
+     * Amostra-se por **quadrados 2×2 inteiros** e nunca píxel a píxel. Saltar de dois em dois daria um
+     * mosaico em que todas as amostras caem na mesma posição do CFA — um mosaico só de verdes, que
+     * depois o *demosaicing* trataria como se fosse uma cena. O quadrado leva as quatro cores e o
+     * padrão sai igual ao do original, que é o que deixa o resto do pipeline correr sem saber de nada.
+     *
+     * Fica ao lado do caminho inteiro em vez de o substituir: o `readMosaic` está provado ao bit contra
+     * a referência em Python, e uma miniatura não é razão para lhe mexer.
+     *
+     * Lê só as linhas de que precisa. A 8, um negativo de 24 MB dá 3 MB lidos e um mosaico de 510×382 —
+     * décimos de segundo em vez de segundos.
+     */
+    fun readMosaicReduced(reducao: Int): Mosaic {
+        require(reducao >= 1) { "a redução é um número de quadrados, e conta-se a partir de um" }
+        if (reducao == 1) return readMosaic()
+        val passo = 2 * reducao
+        val w = (width / passo) * 2
+        val h = (height / passo) * 2
+        require(w >= 2 && h >= 2) { "redução $reducao é maior do que o mosaico" }
+
+        val data = FloatArray(w * h)
+        val bytesPorLinha = width * 2
+        RandomAccessFile(path, "r").use { f ->
+            val buf = ByteArray(bytesPorLinha)
+            for (qy in 0 until h / 2) {
+                for (par in 0 until 2) {
+                    val origem = qy * passo + par
+                    // A tira de uma linha e o seu deslocamento lá dentro: o `DngCreator` escreve sem
+                    // compressão, portanto uma linha ocupa sempre os mesmos bytes e sabe-se onde está.
+                    val tira = origem / rowsPerStrip
+                    val dentro = origem % rowsPerStrip
+                    f.seek(stripOffsets[tira] + dentro.toLong() * bytesPorLinha)
+                    f.readFully(buf, 0, bytesPorLinha)
+                    val base = (qy * 2 + par) * w
+                    for (qx in 0 until w / 2) {
+                        for (parX in 0 until 2) {
+                            val x = qx * passo + parX
+                            val lo = buf[x * 2].toInt() and 0xFF
+                            val hi = buf[x * 2 + 1].toInt() and 0xFF
+                            val v = if (littleEndian) (hi shl 8) or lo else (lo shl 8) or hi
+                            // O preto vem da posição **no original**, que é a mesma do destino: o passo
+                            // é par, e por isso a paridade do CFA atravessa a redução intacta.
+                            val preto = blackLevel[(origem and 1) * 2 + (x and 1)]
+                            data[base + qx * 2 + parX] =
+                                ((v - preto) / (whiteLevel - preto)).toFloat()
+                        }
+                    }
+                }
+            }
+        }
+        return Mosaic(data, w, h, cfa)
+    }
+
+    /**
      * As amostras cruas de 16 bits, sem normalizar.
      *
      * É o que vai para a GPU: o shader faz a normalização de níveis, e enviar inteiros em vez de

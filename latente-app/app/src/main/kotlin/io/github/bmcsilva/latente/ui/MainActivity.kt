@@ -128,6 +128,14 @@ class MainActivity : Activity() {
         rowE.addView(button("Negativos") {
             startActivity(android.content.Intent(this, LibraryActivity::class.java))
         }, weight())
+        // Abre o visor a registar temperatura, bateria e fps de dez em dez segundos. A pergunta é o
+        // que acontece ao fim de vinte minutos, e por isso o botão está aqui e não no visor: é uma
+        // medição, e as medições vivem neste ecrã.
+        rowE.addView(button("Uso prolongado") {
+            val i = android.content.Intent(this, ViewfinderActivity::class.java)
+            i.putExtra("registar", "uso")
+            startActivity(i)
+        }, weight())
         root.addView(rowE)
 
         // Desde o Android 15 com targetSdk 35+, o edge-to-edge é obrigatório: sem isto o conteúdo

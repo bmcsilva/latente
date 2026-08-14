@@ -92,8 +92,8 @@ class Raw:
     """O mosaico e os metadados de que o revelador precisa."""
 
     def __init__(self, path):
-        with open(path, "rb") as fh:
-            data = fh.read()
+        # Solto ou dentro do arquivo: quem revela não tem de saber. Ver `dngcheck.ler_negativo`.
+        data = dngcheck.ler_negativo(path)
         self.t = dngcheck.Tiff(data)
         ifd0, _ = self.t.ifd(self.t.first)
         self.ifd = ifd0
@@ -130,11 +130,21 @@ class Raw:
         self.sensorWidth = 8.16
         self.sensorHeight = 6.12
         lado = os.path.splitext(path)[0] + ".json"
-        if os.path.exists(lado):
+        receita = None
+        if path.lower().endswith(".zip"):
+            # A receita viaja no mesmo saco que o negativo.
+            import zipfile
+            with zipfile.ZipFile(path) as z:
+                nomes = [n for n in z.namelist() if n.lower().endswith(".json")]
+                if nomes:
+                    receita = z.read(nomes[0]).decode("utf-8")
+        elif os.path.exists(lado):
+            with open(lado, encoding="utf-8") as fh:
+                receita = fh.read()
+        if receita is not None:
             try:
                 import json as _json
-                with open(lado, encoding="utf-8") as fh:
-                    meta = _json.load(fh)
+                meta = _json.loads(receita)
                 for filho in meta.get("filhos", []):
                     if filho.get("nome") != "Objectiva":
                         continue

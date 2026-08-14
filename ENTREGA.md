@@ -3,7 +3,7 @@
 Para continuar o projeto noutro computador. Escrito para ser lido por quem chega sem contexto
 nenhum, incluindo um assistente.
 
-Gerado: 2026-08-03 · actualizado: 2026-08-13, com as seis fases concluídas e o visor aprovado nas duas orientações
+Gerado: 2026-08-03 · actualizado: 2026-08-14, com o negativo em arquivo comprimido e a biblioteca com miniaturas
 
 ---
 
@@ -38,9 +38,10 @@ o HAL fez pelas nossas costas.**
 | **F2** — Revelador | **concluída e validada no telefone**: CPU e GPU concordam a **1 em 255**, sem uma única amostra acima disso; cor a 0,7% / 2,3% de uma implementação independente e cartão de cinza a **0,0%**. GPU 13× mais rápida. **132 testes** |
 | **F3** — Visor WYSIWYG | **concluída e validada no telefone**: uniformes ao vivo idênticos aos do ficheiro, cor a **0,7% / 1,9%**, orientação confirmada por correlação (+0,993), enquadramento a 0,7505 contra 0,7500. Disparo a partir do visor com o frame **casado pelo timestamp** nos quatro ensaios, sem interromper o visor. 19–29 fps, limitado pela câmara. **180 testes** |
 | **F4** — Câmara | **fotómetro do RAW e linha de programa M/S/A/P, verificados no telefone**: a margem converge de +0,9 para **+0,5 EV** — o alvo exacto — e fica estável; quatro disparos consecutivos com valores idênticos. **182 testes.** Foco manual com realce de picos, verificado contra uma régua: o pico de nitidez cai nos 40 cm medidos e 1/2,498 D = 0,400 m, ou seja a escala bate a três algarismos. Visor e disparo têm tectos de tempo diferentes — 1/8 s e 1750 ms — com o que falta ao visor compensado por ganho de apresentação. **Confirmado**: em cena escura, 7,8 fps contra 0,6 antes, e o disparo leva 1750 ms honrados pelo HAL, casado pelo timestamp, com o visor a 8,0 fps logo depois. Kelvin e tinta em comando próprio, **provados contra folha branca sob lâmpada de 4000 K**: neutro a 1,7% / 4,1%, quando sem o eixo de tinta o melhor possível deixa 10% / 27%. O fotómetro passou a contar com o ganho de vinhetagem, que era o que fazia o RAW sair bom e o visor queimado. Fica aberto: a correcção de vinhetagem **piora** a uniformidade de cor (9,7% contra 4,4% no azul), e resolver isso precisa de um campo plano a sério — ecrã branco com difusor, não lâmpada. Ajudas feitas: zebras sobre o corte **do sensor** (via alfa da textura), histograma do verde do sensor, nível pelo acelerómetro |
+| **Arquivo** — o negativo comprimido | Cada fotografia é um `LTNT_….zip` com o `.dng` e a receita lá dentro. **7,0 MB em vez de 24** no dispositivo de referência, e **sem perdas**: o mesmo `md5` depois de descomprimir, e o `.dng` de dentro passa o `dngcheck.py` inteiro. Deflate **nível 4**, medido em quatro negativos — nunca pior do que o 6 e um quarto do tempo. O `dngcheck.py` e o `develop.py` aceitam o `.zip` directamente; o darktable não, e aí descomprime-se primeiro. A cópia revelada passou a ser uma escolha ao revelar: **TIFF 16 bits** (~71 MB, arquivo) ou **JPEG** (~3 MB, para ver e partilhar) |
 | F5 — Exportação e biblioteca | **o sidecar reconstrói a revelação**: bloco `Revelação` com a receita, `develop.py --sidecar` a lê-la, e as duas revelações concordam a **0,13% / 0,40%**. Biblioteca e ecrã de análise feitos — a lista mostra uma linha por **fotografia** com os três papéis, e tocar no nome mostra o que o HAL fez pelas costas. **Verificado no telefone ao bit**: revelar da biblioteca produz um TIFF com o nome da fotografia, em 9 s, **idêntico** (diferença máxima 0 de 255) ao do caminho de referência. **Decidido: TIFF16 e nenhum formato comprimido** — AVIF não existe na plataforma e exigiria libavif, contra a decisão de zero dependências. São três ficheiros por fotografia: negativo, receita, cópia revelada |
 | **F6** — Verificação anti-mastigação | **certificado feito e corrido**: 11 promessas, cada uma com o valor que a prova, assinado com modelo, build e data. **Todas verificadas** no dispositivo de referência. Botão «Certificado», ou `-e auto certificado` |
-| **UI** — visor em retrato e paisagem | **as duas aprovadas no telefone**. Retrato: disparador redondo ao centro, dois botões a encaixar nele pela **negativa do círculo**, pastilhas dos parâmetros, grelha de seis campos. Paisagem: imagem à esquerda com a proporção do mosaico e o topo alinhado com a linha do `MODO`, as seis pastilhas na **banda por baixo dela**, coluna de instrumentos de 272 dp à direita, e o disparador no bordo com as duas pastilhas mordidas por cima e por baixo. Falta a biblioteca e o ecrã de análise, que continuam com o aspecto antigo |
+| **UI** — visor em retrato e paisagem | **as duas aprovadas no telefone**. Retrato: disparador redondo ao centro, dois botões a encaixar nele pela **negativa do círculo**, pastilhas dos parâmetros, grelha de seis campos. Paisagem: imagem à esquerda com a proporção do mosaico e o topo alinhado com a linha do `MODO`, as seis pastilhas na **banda por baixo dela**, coluna de instrumentos de 272 dp à direita, e o disparador no bordo com as duas pastilhas mordidas por cima e por baixo. A grelha leva **sete campos** — tempo/abertura/iso/**ev** e foco/temperatura/tinta —, a linha de aviso tem barra de acento, e o botão `IR` leva aos negativos e às experiências. Falta a biblioteca e o ecrã de análise, que continuam com o aspecto antigo |
 
 ## 4. Ambiente
 
@@ -95,7 +96,7 @@ cd latente-app
 # APK em app/build/outputs/apk/debug/app-debug.apk
 ```
 
-**197 testes de unidade** devem passar. Se algum falhar é regressão: todos fixam comportamento
+**200 testes de unidade** devem passar. Se algum falhar é regressão: todos fixam comportamento
 verificado, e vários fixam-no contra a referência em Python que foi validada contra o darktable.
 
 ### A sonda (F0, ferramenta de diagnóstico)
@@ -125,11 +126,13 @@ $ADB shell pm path io.github.bmcsilva.latente
 $ADB shell pm list users
 ```
 
-**O ícone da gaveta abre a `MainActivity`**, que é o ecrã das experiências — «Latente · F1». A câmara é o
-botão **«Abrir o visor»** lá dentro, ou directamente:
+**O ícone da gaveta abre o visor.** As experiências e a biblioteca estão no botão **`IR`** do visor. Por
+adb, cada ecrã directamente:
 
 ```bash
-$ADB shell am start -n io.github.bmcsilva.latente/.ui.ViewfinderActivity
+$ADB shell am start -n io.github.bmcsilva.latente/.ui.ViewfinderActivity   # a câmara
+$ADB shell am start -n io.github.bmcsilva.latente/.ui.MainActivity         # as experiências
+$ADB shell am start -n io.github.bmcsilva.latente/.ui.LibraryActivity      # os negativos
 ```
 
 Os valores aceites no `-e auto`: `experiencias`, `disparar`, `revelar`, `visor`. Os dois últimos
@@ -355,17 +358,25 @@ DNG/RCP/TIFF). Há um protótipo em Figma (`Latente.fig`, e o brief em `latente-
 em `latente-prompt-figma.txt`); a correcção a pedir primeiro é que os mockups foram feitos em **16:9**
 quando o sensor é **4:3**.
 
-**Decisão por tomar, pequena e visível.** O ícone da gaveta abre a `MainActivity`, que é o ecrã das
-experiências, e a câmara é um botão lá dentro. Ficou assim desde a F1 e nunca foi decidido: numa
-aplicação de fotografia o ícone devia abrir o visor, com as experiências e o certificado atrás de um
-botão. É trocar o `intent-filter` no manifesto.
+**Decidido e feito**: o ícone abre o visor, e o visor ganhou o botão `IR` — um menu com «NEGATIVOS» e
+«EXPERIÊNCIAS». Antes disto o ícone abria o ecrã das experiências, e o visor não tinha saída nenhuma.
 
 **Medição que falta.** A correcção de vinhetagem parece degradar a uniformidade de cor — indício forte,
 não provado. Precisa de campo plano a sério: **difusor colado à lente contra um ecrã branco**, que é o
 método que já resolveu a vinhetagem uma vez. Lâmpada não serve, tentou-se e as medições foram rejeitadas.
 
-**Nunca medido.** Uso prolongado: temperatura e bateria depois de vinte minutos de visor. Numa medição de
-trinta segundos os relógios derivaram 15%; meia hora é outra coisa.
+**Nunca medido, e agora com instrumento.** Uso prolongado: temperatura e bateria depois de vinte minutos
+de visor. Numa medição de trinta segundos os relógios derivaram 15%; meia hora é outra coisa. O registo
+existe — botão «Uso prolongado» nas experiências, ou:
+
+```bash
+$ADB shell am start -n io.github.bmcsilva.latente/.ui.ViewfinderActivity -e registar uso
+```
+
+Deixa-se o visor a correr, sai um `.txt` de colunas em `Downloads/Latente` — minuto, bateria, gasto,
+temperatura, estado térmico e fps, de dez em dez segundos. **A temperatura é a da bateria**, que é o
+único termómetro que a plataforma dá a uma aplicação sem privilégios; o cabeçalho do ficheiro di-lo. Se
+o telefone se desligar por calor, o que se mediu até aí é publicado na sessão seguinte. Falta correr.
 
 **Ainda em aberto no código.** O stream que parou duas vezes sem explicação, agora instrumentado: se
 voltar, os contadores dizem se o reader deixou de avisar, se o `acquire` veio vazio, ou se lançou.

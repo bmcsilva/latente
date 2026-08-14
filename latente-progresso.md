@@ -2185,17 +2185,276 @@ utilizador que a *shell* tem por omissão, que neste telefone é o **150, a Past
 o `dumpsys package` responde *Unable to find package*, e no telefone não aparece ícone nenhum. Está na
 ENTREGA, §5.
 
+### A biblioteca, e a miniatura que não existia
+
+A lista era de texto: nome, tamanho, que papéis existem. Ninguém reconhece uma fotografia por
+`LTNT_0007`, e por isso a lista obrigava a abrir para saber o que lá estava. O desenho pedia miniatura
+desde sempre — e **não havia de onde a tirar**: o `DngWriter` escreve pelo `DngCreator` e nunca lhe
+chamou `setThumbnail`, o `DngReader` não a procurava, e o ecrã não a mostrava.
+
+#### De onde vem a miniatura, e porque não vai dentro do negativo
+
+Três saídas, e escolheu-se a terceira:
+
+- **Dentro do negativo**, com `setThumbnail`. Viaja com o ficheiro e faz o DNG aparecer com pré-visão
+  em qualquer visualizador — mas obriga a produzir a imagem **no momento do disparo**, e o caminho da
+  captura está certificado e verificado ao bit. Uma comodidade da lista não é razão para lhe mexer.
+- **Quarto ficheiro** por fotografia. Contraria a decisão dos três papéis.
+- **Cache privada da aplicação**, revelada do negativo — o que se fez. Não é ficheiro do utilizador,
+  apaga-se sem perder nada porque se refaz, e serve também as fotografias antigas, que nenhuma
+  miniatura embebida serviria.
+
+E sai da **mesma revelação que o TIFF**, com a receita do sidecar: `RawPipeline.develop`, o mesmo
+perfil de vinhetagem, a mesma codificação sRGB. Numa aplicação que promete que o visor mostra o
+resultado final, uma lista com miniaturas do ISP seria a mentira mais visível de todas.
+
+#### O mosaico reduzido, e a armadilha de saltar píxeis
+
+Para uma miniatura não se lê o ficheiro todo: `readMosaicReduced(8)` leva **um quadrado 2×2 em cada
+oito**, o que de 4080×3060 dá 510×382 e, com o *binning* do revelador, 255×191. Lê só as linhas de que
+precisa — 3 MB em vez de 24.
+
+Tem de ser por **quadrados inteiros**. Saltar de dois em dois daria um mosaico em que todas as amostras
+caem na mesma posição do CFA — um mosaico só de verdes, que o *demosaicing* trataria como se fosse uma
+cena. Com o quadrado, o padrão atravessa a redução intacto e o resto do pipeline corre sem saber que
+houve redução. Três testes fixam isto: a redução de um é o mosaico inteiro, os quadrados são os certos,
+e o nível de preto continua a vir da posição do CFA. **200 testes.**
+
+O caminho inteiro ficou onde estava, intocado: está provado ao bit contra a referência em Python, e uma
+miniatura não é razão para lhe mexer.
+
+#### O ecrã
+
+Linha com miniatura, número da fotografia, quando foi por extenso, tamanho, e os três selos —
+`DNG` `RCP` `TIFF` — acesos a ciano e apagados quando o papel falta. Esconder o que falta faria uma
+fotografia sem receita parecer igual a uma com receita, e não é igual: não se pode revelar como foi
+vista. O nome inteiro não cabe na linha, e cortado ao fim ficava `…-16383`; mostra-se o `LTNT_0001` e o
+carimbo de tempo apagado atrás, com o nome completo a abrir na análise.
+
+A paleta saiu da actividade do visor para um `Palette` — dois ecrãs da mesma aplicação a escolher
+cinzentos cada um por si é como as interfaces se desfazem.
+
+**Verificado no telefone**: a miniatura aparece revelada do negativo, com data, tamanho e selos certos,
+e o menu `IR` leva lá. Ficaram por ver ao vivo, porque o telefone se desligou, três acabamentos feitos a
+seguir: o nome partido em número e carimbo, a barra de título do sistema removida, e o risco entre
+linhas.
+
+### O menu que se empilhava, e o que a auditoria disse
+
+Defeito encontrado pelo utilizador: no menu das ajudas, cada escolha abria **outra** janela por cima da
+anterior. Com as quatro ligadas eram cinco toques para fechar tudo.
+
+A causa estava escrita no código como se fosse solução: «o menu não se refaz sozinho; reabre-se para o
+ponto do lado mudar de estado à vista». Reabrir cria uma `PopupWindow` nova e a velha continua lá — o
+`PickerPopup` só se fecha sozinho quando a escolha é única.
+
+Corrigido no `PickerPopup`, que é onde devia estar: em escolha múltipla o menu **repinta-se onde está**.
+Cada linha deixa a sua maneira de se repintar, e uma escolha repinta-as todas; quem chama passa um
+`estaActiva` que diz o estado depois da mudança.
+
+**Auditados os outros três** — objectivas, modos e destinos: são de escolha única, fecham ao toque e
+nenhum se reabre. O defeito era só do das ajudas, e era o único menu múltiplo da aplicação.
+
+### A barra do parâmetro mudou-se para a banda
+
+Ideia do utilizador, e paga-se duas vezes. A barra saiu da coluna e foi para baixo da imagem, ao pé das
+pastilhas — que é o que ela mexe. E a coluna, sem ela e sem as pastilhas, deixou de precisar de apertar
+o texto: os valores voltaram aos **16 sp** do retrato e as etiquetas aos 9. Era aritmética e não gosto,
+e a aritmética mudou.
+
+De caminho caiu a última largura escrita à mão. A coluna dos instrumentos tinha 272 dp, e antes 300 e
+320, cada número escolhido contra um caso. Agora a **caixa do visor encolhe também em largura** quando é
+a altura a mandar — que é o que acontece num ecrã 21:9 deitado com uma imagem 4:3 — e a coluna fica com
+tudo o que a imagem não usou. O preto que sobrava dos lados da imagem, dentro da caixa, era espaço que
+não servia ninguém; passou a ser texto.
+
+### O armazenamento: medido, e uma escolha feita
+
+Uma fotografia arquivada custa hoje **~95 MB**: 24 do negativo e 71 da cópia revelada em TIFF de 16 bits.
+
+**A cópia revelada passou a ser uma escolha.** O botão de revelar abre um menu com dois formatos e os
+tamanhos ao lado: TIFF de 16 bits para arquivo, ou JPEG a 95 para ver e partilhar — 71 MB contra ~4. O
+TIFF fica em primeiro porque é o que não perde nada, e é o que a F5 verificou ao bit. A biblioteca passou
+a ter quatro selos, `DNG RCP TIFF JPEG`, e uma fotografia conta como revelada em qualquer dos dois.
+
+Não contraria a decisão do AVIF: o que se recusou nessa altura foi **acrescentar uma biblioteca**
+(libavif) para ter um formato comprimido. O JPEG está na plataforma, no `Bitmap.compress`, e não custa
+dependência nenhuma. Sai em sRGB, como todas as revelações de hoje; quem precisar de outro espaço tem o
+TIFF, que leva o perfil ICC.
+
+#### O negativo passou a viver num arquivo, e a decisão foi do utilizador
+
+«Prefiro comprimir em `.zip` e pôr os ficheiros lá dentro, do que estar a comprimir a imagem em si ao
+disparar.» É a escolha certa e feita: o caminho da captura, que está certificado, continua a produzir
+**exactamente os mesmos bytes**; o que muda é o saco onde eles vão. Cada fotografia é agora um
+`LTNT_….zip` com o `.dng` e o `.json` lá dentro.
+
+**Sem perdas, e provado**: um negativo de 24 999 600 bytes comprimido e descomprimido devolve o mesmo
+`md5`. O *deflate* é reversível ao bit — não é uma questão de opinião nem de nível de qualidade.
+
+**No telefone, uma fotografia real: 7,0 MB em vez de 24 — 28%.** O `.dng` extraído do arquivo passa o
+`dngcheck.py` inteiro: 4080×3060, 16 bits, `Compression 1`, mosaico CFA, metadados todos.
+
+Porque comprime tanto: os dez bits úteis do sensor viajam em palavras de dezasseis, e o byte de cima é
+quase constante.
+
+#### O nível é 4, e a plataforma só dá deflate
+
+Fui à documentação antes de fixar, como o utilizador sugeriu. O `java.util.zip` tem `STORED` e
+`DEFLATED` e mais nada — sem bzip2, sem xz, sem zstd; qualquer um desses traria biblioteca, contra a
+regra de zero dependências. O que há para escolher é o **nível** e a **estratégia**, e ambos se medem.
+
+| negativo | nível 1 | **nível 4** | nível 6 |
+|---|---|---|---|
+| canto de parede | 36,0% · 0,22 s | **32,9% · 0,31 s** | 34,5% · 1,21 s |
+| chapa plana | 37,5% | **34,5% · 0,30 s** | 36,3% · 1,21 s |
+| folha 4000 K | 46,7% | **44,5%** | 44,4% · 1,16 s |
+| receita | 52,5% | **50,9%** | 50,9% · 0,96 s |
+
+O nível 4 **nunca é pior** do que o 6 — em dois dos quatro é 1,5 a 1,8 pontos melhor — e custa um
+quarto do tempo. Não é anomalia: a partir do 4 o zlib passa a *lazy matching*, e nestes dados, que são
+ruído com um byte alto quase constante, as cadeias curtas do 4 acertam melhor do que as longas do 6.
+
+As estratégias também se mediram: `Z_FILTERED` é pior em todos (34,9% contra 33,0%) e `Z_RLE` é muito
+pior (47,5%). Fica a estratégia normal.
+
+#### O que se perde, e o que se fez quanto a isso
+
+Um `.zip` não abre no darktable. A aplicação trata disso sozinha — o `Library.negativo` devolve o
+negativo venha ele solto ou de dentro do arquivo, e por isso a miniatura, a revelação e a análise não
+souberam da diferença. **E as ferramentas do computador também não**: o `dngcheck.py` e o `develop.py`
+aceitam agora um `.zip` directamente, incluindo a receita que vai lá dentro. Verificado: os dois correm
+sobre o arquivo tirado do telefone.
+
+Os negativos soltos de antes continuam a aparecer e a funcionar — o selo da lista diz `ZIP` ou `DNG`
+conforme o caso.
+
+### A paisagem: um exagero meu, e o espelho que faltava
+
+A barra do parâmetro «podia ficar ao nível dos menus por baixo do preview». Li isso como «mudar a barra
+para a banda» e mudei muito mais do que isso — barra para debaixo da imagem, texto maior, coluna com
+outra largura. O utilizador tinha aprovado a paisagem como estava e o que recebeu foi outra. **Revertido
+ao que estava aprovado**, e feito o que era: um espaçador com peso na coluna, que empurra a barra até à
+altura das pastilhas. É a diferença entre ouvir o pedido e ouvir a ideia que ele me deu.
+
+E partiu o retrato, de caminho. O espaçador tem peso, e um `LinearLayout` medido em `AT_MOST` — que é
+como se mede um filho `WRAP_CONTENT` — **também reparte o excesso pelos pesos**. A faixa de baixo
+esticou-se até ao topo e o visor ficou com zero altura. Fica a `GONE` em retrato. A lição: peso dentro
+de uma caixa que se mede pelo conteúdo não é inofensivo.
+
+#### A imagem muda de lado conforme a rotação
+
+Também do utilizador, e é ergonomia a sério: numa das duas paisagens o disparador cai **por cima da
+lente**, e a mão que carrega tapa a objectiva. Não há disposição fixa que resolva — o que serve numa
+rotação estraga a outra. Na rotação 270 espelha-se a fila inteira: disparador à esquerda, coluna ao
+meio, imagem à direita.
+
+Isto obrigou a ouvir o ecrã e não a configuração: virar o telefone ao contrário dentro da mesma paisagem
+**não dispara `onConfigurationChanged`** — a orientação é a mesma e ninguém avisa. Um
+`DisplayManager.DisplayListener` trata disso, e só arruma quando a rotação mudou de facto, porque refazer
+o ecrã redimensiona a superfície e isso reinicia a câmara.
+
+### A galeria do telefone faz de visualizador, e a linha faz de menu
+
+«Não era mais fácil usar a app de galeria do telemóvel?» Era, e é o que se faz. A galeria tem zoom,
+partilha e é a que o utilizador já sabe usar; escrever um visualizador seria fazer pior o que já
+existe. As cópias abrem-se com um `ACTION_VIEW` sobre o `MediaStore` — nem uma linha de desenho.
+
+Para o **negativo** é preciso um passo a mais, e foi o utilizador a apontá-lo: extrai-se
+temporariamente. O negativo vive num zip e é um mosaico; nenhuma galeria o abre, e uma que abrisse um
+DNG mostraria a ideia que o fabricante tem dele — o contrário do que esta aplicação promete. Revela-se
+com a receita dele para um JPEG na cache, a redução 2 (1020×765, pouco mais de um segundo), e manda-se
+ver esse. **Verificado no telefone**: a Galeria da Samsung mostra a nossa revelação do negativo.
+
+Isso obrigou a um fornecedor de conteúdos. O `FileProvider` do androidx traria uma dependência, e o
+projecto não tem nenhuma em tempo de execução — o `PreviewProvider` serve **um** directório da cache,
+só leitura, com o caminho canónico comparado para um nome com `..` não sair de lá.
+
+#### A linha passou a ser um menu
+
+Havia um botão «REVELAR» ao lado de cada fotografia, e a lista passou a ter mais que fazer do que
+revelar: ver o negativo, ver o JPEG, ver o TIFF, análise, revelar nos dois formatos, apagar as cópias,
+apagar tudo. Um botão por acção não cabe, e escolher qual merece botão era escolher mal. A linha
+inteira abre o menu, e o menu mostra **apagado, com a razão**, o que não se pode fazer — «ainda não
+revelado em TIFF», «o negativo foi apagado».
+
+#### Apagar, e o que fica quando o negativo já não está
+
+Duas acções, como o utilizador pediu: **apagar as cópias**, ficando o negativo e a receita, e **apagar
+tudo**. Apaga mesmo, sem passar pela reciclagem — quem apaga um negativo de 7 MB quer o espaço agora,
+não daqui a trinta dias; e a escolha no menu, que diz sempre o que leva, é a confirmação.
+
+E a lista passou a mostrar **fotografias sem negativo**. Era o pedido: apagado o negativo, as
+revelações que sobram têm de continuar à vista para se poderem apagar também, «até deixar de existir
+algo». Antes desapareciam da lista e ficavam no disco a ocupar espaço sem aparecerem em lado nenhum,
+que é a pior maneira de ocupar espaço.
+
+### O instrumento do uso prolongado
+
+Feito, por medir. Regista de dez em dez segundos: minuto desde o arranque, bateria em percentagem e o
+que já gastou, temperatura, estado térmico do `PowerManager` e os fps do visor. Sai um `.txt` de
+colunas em `Downloads/Latente`, pronto a abrir numa folha de cálculo.
+
+Três decisões que valem a pena ficar escritas:
+
+- **A temperatura é a da bateria**, e o ficheiro di-lo em cabeçalho. Não é a do sensor de imagem nem a
+  do SoC — a plataforma não as dá a uma aplicação sem privilégios. Chamar-lhe «temperatura» e deixar
+  quem lê supor o resto seria o género de coisa que este projecto não faz.
+- **Escreve a cada amostra** para a área privada e só publica no fim. O resultado que mais interessa é
+  aquele em que o telefone **não chega ao fim**: se se desligar por calor, o que se mediu está no
+  disco, e a sessão seguinte publica-o.
+- **Abaixo de dois minutos não publica nada.** Abrir e fechar o visor faz-se vinte vezes por dia, e
+  vinte ficheiros de três linhas não respondem à pergunta — respondem que se abriu o visor.
+
+Liga-se pelo botão «Uso prolongado» das experiências, ou por
+`am start -n <pkg>/.ui.ViewfinderActivity -e registar uso`. Fotografar não escreve telemetria nenhuma:
+sem o pedido explícito, o registo nem existe.
+
 ### O que falta na UI
 
 1. **Confirmar a rotação** no telefone (acima).
-2. **Ecrãs da biblioteca e da análise**, ainda com o aspecto antigo: lista de texto, sem a miniatura, a
-   data e as etiquetas DNG/RCP/TIFF que o desenho tem.
+2. ~~**Ecrã da biblioteca**~~ — feito, com miniatura revelada do negativo. Ver «A biblioteca, e a
+   miniatura que não existia». A **análise** ganhou a linguagem do visor mas continua a ser o mesmo
+   texto corrido: o desenho pede blocos, e isso ainda não está feito.
 3. ~~**Layout de paisagem**~~ — feito e aprovado no telefone. Ver «A banda por baixo do visor».
-4. **Três acabamentos diagnosticados**, todos pequenos: a compensação aparece colada à tinta
-   (`+0.00  -1.1 EV`) por falta de largura; o `VINH OK` e o `CORTE NO SENSOR` continuam em maiúsculas
-   porque são construídos no fio de render e não no ecrã; e falta a barra de acento antes do aviso.
-5. **O ícone da gaveta abre o ecrã das experiências**, e a câmara é um botão lá dentro. Foi assim desde
-   a F1 e nunca foi decidido — é decisão a tomar, não defeito.
+4. ~~**A barra de acento antes do aviso**~~ — feita. Desenho composto e não uma vista à parte: o texto
+   desliza e a barra tem de ficar quieta no princípio da linha; e uma fila de duas vistas mudaria a
+   altura da faixa, que aqui reinicia a câmara.
+5. ~~**A compensação colada à tinta**~~ — resolvida, e o diagnóstico estava errado. Não era falta de
+   largura: era falta de **sítio**. Dos seis parâmetros do anel, cinco tinham campo na grelha e o EV
+   não tinha, e por isso ia escrito atrás da tinta — `+0.00  -1.1 EV` lê-se como um valor só. Agora tem
+   campo próprio no grupo da luz, decisão do utilizador: **tempo / abertura / iso / ev**, e depois foco
+   / temperatura / tinta. Quatro e três em retrato, dois a dois em paisagem, com espaçadores nas filas
+   curtas para as colunas alinharem. E deixou de se esconder a zero: um campo que desaparece é um campo
+   que se procura.
+6. ~~**O ícone da gaveta**~~ — passou a abrir o **visor**, decisão do utilizador. O que custava não era
+   a linha do manifesto: era o visor não ter saída nenhuma, e trocar o lançador sem lhe dar uma deixava
+   a biblioteca e as experiências órfãs. Ganhou o botão **`IR`**, um menu com dois destinos —
+   «NEGATIVOS» e «EXPERIÊNCIAS». Um menu e não dois botões, que é o idioma que o ecrã já fala e não
+   gasta largura na fila onde se fotografa. Em retrato fica encostado à margem, com o `AJUDAS` entre
+   ele e o disparador — quem tem a mordida tem de ficar ao lado do círculo. Em paisagem vai para o topo
+   da pilha, longe do polegar que procura o disparo.
+
+Uma pendência desta lista **não existia**: o `VINH OK` e o `CORTE NO SENSOR` em maiúsculas estavam
+escritos como defeito por a nota ter sido feita quando o plano eram etiquetas minúsculas. O utilizador
+reverteu essa decisão depois de as ver, e maiúsculas é o que está decidido — não há nada a corrigir.
+
+**Verificado no telefone**, capturas nas duas orientações, 197 testes a passar. O lançador resolve para
+a `ViewfinderActivity`, o `IR` está no sítio, a barra de acento aparece antes do aviso, o `EV` tem campo
+e o `AJUDAS` cabe na fila de retrato ao lado do botão novo.
+
+#### A grelha alinhada não servia, e foi a captura que o disse
+
+A primeira versão punha as duas filas com as **mesmas quatro colunas**, com espaçadores a fechar a fila
+curta — parecia melhor, é uma grelha a sério. No telefone leu-se `TEMPERATU…`: quatro colunas dão 82 dp
+e «TEMPERATURA» a 9 sp não cabe lá.
+
+Cada grupo passou a repartir a sua própria fila: quatro campos na luz, três na interpretação com os
+mesmos 109 dp de antes. As colunas das duas filas deixam de se corresponder, e não faz falta nenhuma —
+uma etiqueta cortada faz.
+
+Em paisagem continuam dois por fila nos dois grupos, e aí o espaçador fica: sem ele a `tinta` sozinha
+esticava-se pelas duas colunas e saía de baixo do `foco`.
 
 Nota de método: o modo pode não sobreviver a um `am force-stop` porque o `apply()` das preferências é
 assíncrono e o processo morre antes de o disco ser escrito. É artefacto do ensaio, não do uso — ao sair

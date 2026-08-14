@@ -22,6 +22,7 @@ import android.widget.TextView
 import io.github.bmcsilva.latente.camera.CameraSession
 import io.github.bmcsilva.latente.camera.HalClamp
 import io.github.bmcsilva.latente.camera.Planner
+import io.github.bmcsilva.latente.export.Archive
 import io.github.bmcsilva.latente.export.DngWriter
 import io.github.bmcsilva.latente.export.Json
 import io.github.bmcsilva.latente.export.MediaStoreOut
@@ -29,6 +30,7 @@ import io.github.bmcsilva.latente.export.Sidecar
 import io.github.bmcsilva.latente.model.Body
 import io.github.bmcsilva.latente.model.ExposureProgram
 import io.github.bmcsilva.latente.model.Meter
+import io.github.bmcsilva.latente.diag.UsageLog
 import io.github.bmcsilva.latente.model.Settings
 import io.github.bmcsilva.latente.model.LensProfile
 import io.github.bmcsilva.latente.render.Demosaic
@@ -111,13 +113,12 @@ class ViewfinderActivity : Activity() {
             else -> 0xFF9CE07A.toInt()
         }
 
-        // A paleta, num sítio só. Preto verdadeiro porque o *chrome* continua a imagem: numa moldura
-        // cinzenta a vista adapta-se ao cinzento e julga mal o brilho do que está no visor.
-        const val PRETO = 0xFF000000.toInt()
-        const val CINZA = 0xFF9AA0A6.toInt()
-        /** O mesmo ciano do realce de foco: nesta aplicação, ciano quer dizer «o instrumento falou». */
-        const val CIANO = 0xFF00FFF2.toInt()
-        const val AMBAR = 0xFFFFB300.toInt()
+        // A paleta mudou-se para o `Palette`, que é onde a biblioteca também lhe chega. Os nomes
+        // ficam: são cento e tal usos neste ficheiro, e trocá-los não muda um pixel.
+        const val PRETO = Palette.PRETO
+        const val CINZA = Palette.CINZA
+        const val CIANO = Palette.CIANO
+        const val AMBAR = Palette.AMBAR
     }
 
     private lateinit var superficie: SurfaceView
@@ -131,6 +132,7 @@ class ViewfinderActivity : Activity() {
     private lateinit var campoTempo: TextView
     private lateinit var campoAbertura: TextView
     private lateinit var campoIso: TextView
+    private lateinit var campoEv: TextView
     private lateinit var campoFoco: TextView
     private lateinit var campoKelvin: TextView
     private lateinit var campoTinta: TextView
@@ -173,14 +175,30 @@ class ViewfinderActivity : Activity() {
     /** Onde as pastilhas e a fila dos comandos vivem em retrato. Ver `arrumar`. */
     private lateinit var caixaDePastilhas: FrameLayout
     private lateinit var caixaDosComandos: FrameLayout
+    private lateinit var caixaDaBarra: FrameLayout
     /** A etiqueta do `MODO`: é por ela que o topo da imagem se alinha em paisagem. */
     private var etiquetaDoModo: TextView? = null
     private var emPaisagem = false
+
+    /** A rotação do ecrã da última vez que se arrumou. Ver `ouvinteDoEcra`. */
+    private var rotacaoArrumada = -1
+
+    /** Ver onde é criado: só tem peso em paisagem, e em retrato tem de estar `GONE`. */
+    private lateinit var espacadorDaBarra: View
     private var botaoDoDisparo: ShutterButton? = null
     private var comandosRef: LinearLayout? = null
     private var celulaEsquerdaRef: LinearLayout? = null
     private var direitaRef: LinearLayout? = null
     private var botaoDeAjudas: TextView? = null
+    private var botaoDeDestinos: TextView? = null
+
+    /**
+     * O registo de uso prolongado, quando a sessão foi aberta para o medir.
+     *
+     * Nulo é o caso normal: fotografar não escreve ficheiros de telemetria. Liga-se pelo botão «Uso
+     * prolongado» das experiências, ou por `-e registar uso`.
+     */
+    private var registoDeUso: UsageLog? = null
     private var botaoDaObjectiva: TextView? = null
     private var trocarPara: ((Int) -> Unit)? = null
     private var botaoDoModo: TextView? = null
@@ -260,6 +278,19 @@ class ViewfinderActivity : Activity() {
         avisosView.setHorizontallyScrolling(true)
         // Sem isto o `marquee` só anda com o foco, e um `TextView` de telemetria nunca o tem.
         avisosView.isSelected = true
+        // A barra de acento antes do texto, do desenho do utilizador.
+        //
+        // Um aviso é a única coisa deste ecrã que interrompe — e sem marca nenhuma era uma linha âmbar
+        // entre outras linhas de texto. A barra dá-lhe princípio: o olho encontra o sítio antes de ler
+        // a palavra, que é o que se quer de um aviso.
+        //
+        // Desenho composto e não uma vista à parte: o texto desliza e a barra tem de ficar quieta no
+        // início da linha. Numa fila de duas vistas, a que desliza teria de ser medida à parte, e a
+        // faixa mudava de altura — que aqui reinicia a câmara.
+        val acento = android.graphics.drawable.ColorDrawable(AMBAR)
+        acento.setBounds(0, 0, dp(3), avisosView.lineHeight)
+        avisosView.setCompoundDrawablesRelative(acento, null, null, null)
+        avisosView.compoundDrawablePadding = dp(8)
 
         topo.addView(avisosView)
 
@@ -330,11 +361,29 @@ class ViewfinderActivity : Activity() {
         // Fim do gesto: uma escrita em disco, não mil.
         comando.aoLargar = { render?.guardarEscolhas() }
         barra = comando
+        // Como as pastilhas: contentor a guardar o lugar, porque em paisagem a barra muda de coluna.
+        caixaDaBarra = FrameLayout(this)
+        caixaDaBarra.addView(comando, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // O espaçador que faz a barra descer, **e que só pode existir em paisagem**.
+        //
+        // Em paisagem a faixa de baixo é uma coluna com altura a mais, e a barra ficava colada aos
+        // campos com um vazio por baixo. Com peso, a folga vai toda para cima dela: a barra desce até à
+        // altura das pastilhas que estão por baixo da imagem, que é onde o dedo já anda.
+        //
+        // Em retrato tem de ir a `GONE`, e não basta não haver folga: um `LinearLayout` medido em
+        // `AT_MOST` — que é como um filho `WRAP_CONTENT` é medido — **também reparte o excesso pelos
+        // pesos**. A faixa de baixo esticava-se até ao topo do ecrã e o visor ficava com zero. Partiu o
+        // retrato todo, e a lição fica: peso dentro de uma caixa que se mede pelo conteúdo não é
+        // inofensivo.
+        espacadorDaBarra = View(this)
+        fundo.addView(espacadorDaBarra, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         val lpComando = LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         lpComando.topMargin = dp(6)
         lpComando.bottomMargin = dp(4)
-        fundo.addView(comando, lpComando)
+        fundo.addView(caixaDaBarra, lpComando)
 
         // Os parâmetros em fila, e não um botão que cicla.
         //
@@ -413,6 +462,31 @@ class ViewfinderActivity : Activity() {
         val instrumentos = botaoDeMenu("AJUDAS", lua = 2)
         instrumentos.setOnClickListener { menuDeAjudas(instrumentos) }
         botaoDeAjudas = instrumentos
+
+        // A saída do visor, que até aqui não existia.
+        //
+        // O ícone da gaveta passou a abrir a câmara, como faz uma aplicação de fotografia. Mas o visor
+        // não tinha caminho para lado nenhum — nem para os negativos nem para as experiências —, e
+        // trocar o lançador sem lhe dar um deixava dois ecrãs órfãos, alcançáveis só por adb.
+        //
+        // Um menu e não dois botões: é o idioma que o ecrã já fala, e os dois destinos visitam-se de
+        // vez em quando. Dois botões custariam largura à fila onde se fotografa.
+        val ir = botaoDeMenu("")
+        // Três linhas em vez da palavra «IR»: é o sinal que toda a gente já sabe ler, e num botão de
+        // 44 dp a palavra roubava o espaço que a mão quer para acertar. Sem o triângulo do acento —
+        // as três linhas já dizem «abre uma lista», e dois sinais para a mesma coisa é ruído.
+        ir.text = ""
+        // Por cima e não ao lado do texto: um desenho composto num `TextView` fica **à esquerda** do
+        // sítio onde o texto ficaria, e com o texto vazio isso é encostado à margem. Como frente da
+        // vista, o `MenuGlyph` recebe a caixa toda e desenha-se no meio dela.
+        ir.setPadding(0, 0, 0, 0)
+        // A gravidade **explícita**: sem ela a frente da vista encosta-se à esquerda em vez de encher
+        // a caixa, e as três linhas ficavam coladas ao bordo da pastilha. Medido a olho no ecrã e
+        // depois em píxeis: o glifo começava exactamente no bordo esquerdo.
+        ir.foregroundGravity = android.view.Gravity.CENTER
+        ir.foreground = MenuGlyph(Color.WHITE, dp(16).toFloat(), dp(2).toFloat())
+        ir.setOnClickListener { menuDeDestinos(ir) }
+        botaoDeDestinos = ir
 
         // O disparador ao centro, os comandos aos lados.
         //
@@ -508,6 +582,13 @@ class ViewfinderActivity : Activity() {
         aplicarAjudas()
         arrumar(resources.configuration.orientation)
         setContentView(raiz)
+
+        // O registo de uso prolongado, se foi para isso que a sessão abriu.
+        //
+        // O `publicarPendente` corre sempre, e é o que interessa quando a medição não chega ao fim: se
+        // o telefone se desligou por calor, o que se mediu até aí está no disco e sai agora.
+        UsageLog(this).publicarPendente()?.let { dizer(it + " escrito") }
+        if (intent?.getStringExtra("registar") == "uso") registoDeUso = UsageLog(this)
 
 
         val corpo = Body(this)
@@ -630,32 +711,70 @@ class ViewfinderActivity : Activity() {
     }
 
     /**
-     * A grelha, na ordem em que se pensa uma exposição: primeiro a luz — tempo, abertura, ISO —, depois
-     * a interpretação — foco, temperatura, tinta.
+     * A grelha, na ordem em que se pensa uma exposição: primeiro a luz — tempo, abertura, ISO,
+     * compensação —, depois a interpretação — foco, temperatura, tinta.
      *
-     * Três por dois em retrato, **dois por três** em paisagem: é o que dá largura para as etiquetas.
+     * Quatro e três em retrato, **dois a dois** em paisagem: é o que dá largura para as etiquetas.
+     *
+     * A compensação teve de entrar aqui. Dos seis parâmetros que o comando mexe, cinco tinham campo e
+     * ela não: ia escrita atrás do valor da tinta, e lia-se `+0.00  -1.1 EV` como se fosse um valor só.
+     * Não era falta de largura, era falta de sítio.
+     *
+     * **Cada grupo reparte a sua fila**, e não as quatro colunas da primeira.
+     *
+     * Alinhar as duas filas parecia melhor e não é: com quatro colunas de 82 dp, «TEMPERATURA» a 9 sp
+     * não cabe e sai «TEMPERATU…». O grupo da interpretação tem três campos e a largura toda para eles,
+     * que dá 109 cada. Uma grelha em que as colunas não se correspondem lê-se bem; uma etiqueta cortada,
+     * não.
+     *
+     * Em paisagem são dois por fila nos dois grupos, e aí a fila curta leva um espaçador — sem ele a
+     * `tinta` sozinha esticava-se pelas duas colunas e saía de baixo do `foco`.
      */
     private fun montarGrelha(paisagem: Boolean) {
         grelha.removeAllViews()
-        val nomes = arrayOf("TEMPO", "ABERTURA", "ISO", "FOCO", "TEMPERATURA", "TINTA")
-        val postos = arrayOfNulls<TextView>(6)
-        val porFila = if (paisagem) 2 else 3
+        val luz = arrayOf("TEMPO", "ABERTURA", "ISO", "EV")
+        val interpretacao = arrayOf("FOCO", "TEMPERATURA", "TINTA")
+        val postos = arrayOfNulls<TextView>(7)
         var fila: LinearLayout? = null
-        for (i in 0 until 6) {
-            if (i % porFila == 0) {
-                fila = LinearLayout(this)
-                fila.orientation = LinearLayout.HORIZONTAL
-                if (grelha.childCount > 0) fila.setPadding(0, dp(4), 0, 0)
-                grelha.addView(fila)
+        var naFila = 0
+        var i = 0
+        for (grupo in arrayOf(luz, interpretacao)) {
+            val porFila = if (paisagem) 2 else grupo.size
+            naFila = porFila
+            for (nome in grupo) {
+                if (fila == null || naFila == porFila) {
+                    fila = novaFilaDaGrelha()
+                    naFila = 0
+                }
+                postos[i] = campo(fila, nome, 1f)
+                naFila++
+                i++
             }
-            postos[i] = campo(fila!!, nomes[i], 1f)
+            // Fim do grupo: o que falta para fechar a fila fica em branco, e não repartido pelos outros.
+            while (naFila > 0 && naFila < porFila) {
+                // Com a mesma margem de um campo: sem ela o espaçador ficava 14 dp mais largo e as
+                // colunas da fila curta saíam desalinhadas das da fila cheia por essa exacta medida.
+                val lp = LinearLayout.LayoutParams(0, 0, 1f)
+                lp.leftMargin = dp(14)
+                fila!!.addView(View(this), lp)
+                naFila++
+            }
         }
         campoTempo = postos[0]!!
         campoAbertura = postos[1]!!
         campoIso = postos[2]!!
-        campoFoco = postos[3]!!
-        campoKelvin = postos[4]!!
-        campoTinta = postos[5]!!
+        campoEv = postos[3]!!
+        campoFoco = postos[4]!!
+        campoKelvin = postos[5]!!
+        campoTinta = postos[6]!!
+    }
+
+    private fun novaFilaDaGrelha(): LinearLayout {
+        val fila = LinearLayout(this)
+        fila.orientation = LinearLayout.HORIZONTAL
+        if (grelha.childCount > 0) fila.setPadding(0, dp(4), 0, 0)
+        grelha.addView(fila)
+        return fila
     }
 
     /**
@@ -707,7 +826,7 @@ class ViewfinderActivity : Activity() {
         //
         // De caminho resolve o que faltava: saindo os três da coluna, ela ganha a altura que lhe faltava
         // para a segunda fila de pastilhas caber.
-        for (v in arrayOf<View?>(botaoDeAjudas, botaoDoModo, botaoDaObjectiva)) {
+        for (v in arrayOf<View?>(botaoDeAjudas, botaoDoModo, botaoDaObjectiva, botaoDeDestinos)) {
             (v?.parent as? ViewGroup)?.removeView(v)
         }
         botaoDoDisparo?.let { d ->
@@ -716,6 +835,13 @@ class ViewfinderActivity : Activity() {
                 val pilha = LinearLayout(this)
                 pilha.orientation = LinearLayout.VERTICAL
                 pilha.gravity = android.view.Gravity.CENTER_HORIZONTAL
+                // O «ir» no topo da pilha, longe do disparador: é o que menos se toca e não deve estar
+                // onde o polegar procura o botão de fotografar.
+                botaoDeDestinos?.let {
+                    val lp = LinearLayout.LayoutParams(dp(LUA_LARGURA), dp(44))
+                    lp.bottomMargin = dp(10)
+                    pilha.addView(it, lp)
+                }
                 // **A largura do disparador, e não mais.** É geometria e não gosto: a mordida é a
                 // negativa de um círculo de 39 dp de raio, e um arco desses não atravessa uma aresta
                 // maior do que 78 dp. Com 84 o arco cobria 56% da aresta e as duas pontas ficavam a
@@ -754,9 +880,15 @@ class ViewfinderActivity : Activity() {
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
                 }
                 celulaEsquerdaRef?.let { ce ->
+                    // O «ir» encostado à margem e o «ajudas» ao disparador: quem tem a mordida tem de
+                    // ficar ao lado do círculo, senão o encaixe não quer dizer nada.
+                    botaoDeDestinos?.let {
+                        ce.addView(it, LinearLayout.LayoutParams(dp(44), dp(44)))
+                    }
                     botaoDeAjudas?.let {
-                        ce.addView(it, LinearLayout.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+                        val lp = LinearLayout.LayoutParams(0, dp(44), 1f)
+                        lp.leftMargin = dp(4)
+                        ce.addView(it, lp)
                     }
                 }
                 direitaRef?.let { dd ->
@@ -774,6 +906,7 @@ class ViewfinderActivity : Activity() {
                 comandosRef?.addView(d, 1, lp)
             }
         }
+        espacadorDaBarra.visibility = if (paisagem) View.VISIBLE else View.GONE
         caixaDePastilhas.visibility = if (paisagem) View.GONE else View.VISIBLE
         caixaDosComandos.visibility = if (paisagem) View.GONE else View.VISIBLE
         if (paisagem) {
@@ -797,26 +930,37 @@ class ViewfinderActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
             lpFila.topMargin = dp(5)
             colunaDoVisor.addView(pastilhas, lpFila)
-            raiz.addView(colunaDoVisor, LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+            // **De que lado fica a imagem depende de para que lado o telefone foi rodado.**
+            //
+            // A objectiva está num canto do corpo, e numa das duas paisagens esse canto cai do lado do
+            // disparador — a mão que carrega tapa a lente. Foi o utilizador a dar por isso, e não há
+            // disposição fixa que resolva: o que serve numa rotação estraga a outra. Espelha-se a fila
+            // inteira, e o dedo continua a encontrar o círculo no mesmo ponto do corpo.
+            val espelhado = rotacaoDoEcra() == 270
+            rotacaoArrumada = rotacaoDoEcra()
+            render?.definirRotacaoDoEcra(rotacaoArrumada)
+            val lpVisor = LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+            val lpColuna = LinearLayout.LayoutParams(dp(272),
+                ViewGroup.LayoutParams.MATCH_PARENT)
+            val lpFaixa = LinearLayout.LayoutParams(dp(96),
+                ViewGroup.LayoutParams.MATCH_PARENT)
+            if (espelhado) raiz.addView(faixaDoDisparo, lpFaixa)
+            if (espelhado) raiz.addView(coluna, lpColuna)
+            raiz.addView(colunaDoVisor, lpVisor)
             alinharVisorAoTopo(true)
             alinharColunaPeloModo()
             coluna.addView(topo, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             coluna.addView(fundo, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-            // 272 dp, e a imagem agradece.
-            //
-            // Eram 300, e 320 antes disso, porque a coluna levava as pastilhas: seis nomes numa coluna
-            // estreita não cabem. Saindo elas para a banda, o que a coluna tem de aguentar são dois
-            // campos por linha — «TEMPERATURA» a 8 sp mede 65 dp e cada célula fica com 113. Os 28 dp
-            // que sobram vão para a imagem, que é onde valem alguma coisa.
-            raiz.addView(coluna, LinearLayout.LayoutParams(dp(272),
-                ViewGroup.LayoutParams.MATCH_PARENT))
-            // A faixa do disparador acompanha: a pilha passou de 84 para os 76 dp do disparador.
-            raiz.addView(faixaDoDisparo, LinearLayout.LayoutParams(dp(96),
-                ViewGroup.LayoutParams.MATCH_PARENT))
+            // 272 dp na coluna, 96 na faixa do disparador: as pastilhas saíram para a banda e o que a
+            // coluna tem de aguentar são dois campos por linha. Já foram 300 e 320, quando levava tudo.
+            if (!espelhado) raiz.addView(coluna, lpColuna)
+            if (!espelhado) raiz.addView(faixaDoDisparo, lpFaixa)
         } else {
+            rotacaoArrumada = rotacaoDoEcra()
+            render?.definirRotacaoDoEcra(rotacaoArrumada)
             aplicarProporcaoDoVisor()
             caixaDePastilhas.addView(pastilhas, FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -893,8 +1037,39 @@ class ViewfinderActivity : Activity() {
         arrumar(nova.orientation)
     }
 
+    /**
+     * Virar o telefone ao contrário, dentro da mesma paisagem, **não muda a configuração**.
+     *
+     * O `onConfigurationChanged` só fala quando a orientação passa de retrato a paisagem ou ao
+     * contrário; entre as duas paisagens — 90 e 270 — a configuração é a mesma e ninguém avisa. E é
+     * justamente aí que a imagem tem de trocar de lado, para o disparador não cair sobre a lente.
+     *
+     * Só se arruma quando a rotação **mudou de facto**: refazer o ecrã redimensiona a superfície, e
+     * isso reinicia a câmara.
+     */
+    private val ouvinteDoEcra = object : android.hardware.display.DisplayManager.DisplayListener {
+        override fun onDisplayAdded(id: Int) {}
+
+        override fun onDisplayRemoved(id: Int) {}
+
+        override fun onDisplayChanged(id: Int) {
+            if (rotacaoDoEcra() == rotacaoArrumada) return
+            // Em retrato não há nada a rearrumar — a disposição é a mesma de pé ou de cabeça para
+            // baixo —, mas o visor tem de saber, senão continua a desenhar para o lado antigo.
+            if (!emPaisagem) {
+                rotacaoArrumada = rotacaoDoEcra()
+                render?.definirRotacaoDoEcra(rotacaoArrumada)
+                return
+            }
+            arrumar(resources.configuration.orientation)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+        registoDeUso?.comecar()
+        (getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
+            .registerDisplayListener(ouvinteDoEcra, ui)
         val sm = getSystemService(Context.SENSOR_SERVICE) as android.hardware.SensorManager
         val acel = sm.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER) ?: return
         val ouvinte = object : android.hardware.SensorEventListener {
@@ -990,6 +1165,11 @@ class ViewfinderActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        (getSystemService(Context.DISPLAY_SERVICE) as android.hardware.display.DisplayManager)
+            .unregisterDisplayListener(ouvinteDoEcra)
+        // Fecha e publica: uma medição de uso prolongado acaba quando o visor sai de cena, que é
+        // também quando o telefone deixa de aquecer por nossa causa.
+        registoDeUso?.parar()?.let { dizer(it + " escrito") }
         ouvinteDoNivel?.let { sensores?.unregisterListener(it) }
         ouvinteDoNivel = null
         // A câmara larga-se ao sair de cena. Se não, o sistema revoga-a e o HAL fecha o dispositivo.
@@ -1077,12 +1257,30 @@ class ViewfinderActivity : Activity() {
         for (b in bits) {
             opcoes.add(Opcao(b, nomeDaAjuda(b).uppercase(), detalheDaAjuda(b), (ajuda and b) != 0))
         }
-        PickerPopup.mostrar(this, ancora, opcoes, multipla = true) { bit ->
+        // O menu repinta-se onde está. Reabria-se para o ponto do lado mudar de estado à vista, e isso
+        // empilhava uma janela por escolha: com as quatro ajudas ligadas eram cinco toques para fechar.
+        PickerPopup.mostrar(this, ancora, opcoes, multipla = true,
+            estaActiva = { bit -> (ajuda and bit) != 0 }) { bit ->
             ajuda = ajuda xor bit
             prefs?.aids = ajuda
             aplicarAjudas()
-            // O menu não se refaz sozinho; reabre-se para o ponto do lado mudar de estado à vista.
-            menuDeAjudas(ancora)
+        }
+    }
+
+    /**
+     * Para onde se pode ir a partir do visor.
+     *
+     * Dois destinos, e os dois são visitas: os negativos vêem-se depois de fotografar, as experiências
+     * correm-se quando se está a medir alguma coisa. Nenhum é caminho de cada fotografia, e por isso
+     * ficam atrás de um toque em vez de gastarem largura na fila do disparo.
+     */
+    private fun menuDeDestinos(ancora: View) {
+        val opcoes = listOf(
+            Opcao(0, "NEGATIVOS", "as fotografias e o que o HAL fez"),
+            Opcao(1, "EXPERIÊNCIAS", "sondas, medições e certificado"))
+        PickerPopup.mostrar(this, ancora, opcoes, multipla = false) { qual ->
+            val destino = if (qual == 0) LibraryActivity::class.java else MainActivity::class.java
+            startActivity(android.content.Intent(this, destino))
         }
     }
 
@@ -1234,8 +1432,8 @@ class ViewfinderActivity : Activity() {
         t.setSpan(android.text.style.ForegroundColorSpan(0xFF7A8085.toInt()), i, t.length, 0)
         v.text = t
         v.setTextColor(if (aceso) CIANO else Color.WHITE)
-        val fundo = if (aceso) 0xFF10292E.toInt() else 0xFF1F2226.toInt()
-        val contorno = if (aceso) CIANO else 0xFF33383E.toInt()
+        val fundo = if (aceso) Palette.PASTILHA_ACESA else Palette.PASTILHA
+        val contorno = if (aceso) CIANO else Palette.CONTORNO
         val lua = v.tag as? Int ?: 0
         // O preenchimento é feito **aqui** e não na criação do botão, porque o lado da mordida muda com
         // o ecrã: o mesmo «AJUDAS» é mordido à direita em retrato e na base em paisagem. Posto uma vez
@@ -1289,7 +1487,7 @@ class ViewfinderActivity : Activity() {
         v.setTextColor(if (activa) PRETO else CINZA)
         val fundo = android.graphics.drawable.GradientDrawable()
         fundo.cornerRadius = dp(17).toFloat()
-        fundo.setColor(if (activa) corDoParametro(i) else 0xFF1F2226.toInt())
+        fundo.setColor(if (activa) corDoParametro(i) else Palette.PASTILHA)
         v.background = fundo
         val margem = dp(3)
         v.setPadding(margem, 0, margem, 0)
@@ -1475,6 +1673,8 @@ class ViewfinderActivity : Activity() {
         var visor: String? = null
         var vinheta = ""
         var fps = ""
+        /** O mesmo número, por medir e não por escrever: é o que o registo de uso prolongado guarda. */
+        var fpsMedidos = 0.0
     }
 
     /** Põe no ecrã o que o fio de render mediu. Corre na thread principal. */
@@ -1503,7 +1703,8 @@ class ViewfinderActivity : Activity() {
         campoIso.text = t.iso
         campoFoco.text = t.foco
         campoKelvin.text = t.kelvin
-        campoTinta.text = t.compensacao?.let { t.tinta + "  " + it } ?: t.tinta
+        campoTinta.text = t.tinta
+        campoEv.text = t.compensacao ?: "—"
         if (t.visor == null) {
             campoVisor.visibility = View.INVISIBLE
         } else {
@@ -1512,6 +1713,7 @@ class ViewfinderActivity : Activity() {
         }
         vinhetaView.text = t.vinheta
         fpsView.text = t.fps
+        registoDeUso?.fps = t.fpsMedidos
     }
 
     /**
@@ -1581,8 +1783,7 @@ class ViewfinderActivity : Activity() {
         v.text = "—"
         v.setTextColor(Color.WHITE)
         // Mais pequeno em paisagem, e é aritmética e não gosto: cinco linhas de campos a 16 sp, mais o
-        // aviso, a barra e duas filas de pastilhas, pedem 1179 px de uma coluna que tem 1080 — e a
-        // segunda fila de pastilhas ficava abaixo do bordo.
+        // aviso, a barra e as pastilhas, pedem mais altura do que a coluna tem.
         v.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (emPaisagem) 14f else 16f)
         v.typeface = Typeface.MONOSPACE
         v.maxLines = 1
@@ -1662,18 +1863,44 @@ class ViewfinderActivity : Activity() {
         @Volatile
         private var rotacaoDoCorpo = rotacaoEcra
 
+        /**
+         * A rotação do **ecrã**, que é outra coisa e nem sempre coincide.
+         *
+         * Coincidem com a rotação automática ligada e o telefone de pé. Deixam de coincidir em dois
+         * casos, e nos dois quem manda no que se desenha é o ecrã: com o telefone **pousado na mesa**,
+         * onde a gravidade não diz lado nenhum e o corpo fica com a última leitura; e com a rotação
+         * **travada**, onde o sistema não roda e virar o telefone tem mesmo de virar a cena.
+         */
+        @Volatile
+        private var rotacaoDoEcra = rotacaoEcra
+
         private var orientacaoDoSensor = 90
 
         fun definirRotacaoDoCorpo(graus: Int) {
             rotacaoDoCorpo = graus
         }
 
+        fun definirRotacaoDoEcra(graus: Int) {
+            rotacaoDoEcra = graus
+        }
+
         /**
-         * Quanto é preciso rodar o mosaico para a cena aparecer de pé.
+         * Quanto é preciso rodar o mosaico para a cena aparecer de pé **no ecrã**.
          *
-         * Calculada a cada uso e não guardada: é o que faz o visor seguir o pulso. Vai ao mesmo tempo
-         * ao ecrã e à etiqueta do ficheiro — se divergissem, o visor mostrava direito e o ficheiro
-         * saía deitado, que é o defeito que já corrigimos uma vez.
+         * Seguia o acelerómetro, e havia um caso em que isso saía errado: telefone pousado na mesa, em
+         * retrato, com a última leitura do corpo em paisagem — a imagem aparecia deitada, uma faixa
+         * larga dentro de uma caixa alta. A `SurfaceView` está presa ao ecrã, e por isso é o ecrã que
+         * decide como se desenha.
+         */
+        private fun rotacaoDoVisor(): Int =
+            Present.rotationFor(orientacaoDoSensor, rotacaoDoEcra)
+
+        /**
+         * Quanto é preciso rodar o mosaico para a fotografia sair de pé **no ficheiro**.
+         *
+         * Esta continua a vir do acelerómetro, e é a diferença que interessa: com a rotação travada, o
+         * ecrã fica em retrato e a fotografia tem de sair na posição em que o corpo estava. Os dois
+         * caminhos mostram os mesmos píxeis; o que muda é a etiqueta de para que lado está o mundo.
          */
         private fun rotacaoDaImagem(): Int =
             Present.rotationFor(orientacaoDoSensor, rotacaoDoCorpo)
@@ -2036,7 +2263,7 @@ class ViewfinderActivity : Activity() {
                     val p = img.planes[0]
                     visor.upload(p.buffer, p.rowStride)
                     visor.draw()
-                    visor.present(larguraVista, alturaVista, rotacaoDaImagem(), picos, zebras,
+                    visor.present(larguraVista, alturaVista, rotacaoDoVisor(), picos, zebras,
                         aoTopo = visorAoTopo)
                     medirEAjustar(sessao, p)
                 } finally {
@@ -2259,12 +2486,19 @@ class ViewfinderActivity : Activity() {
                 val resumo = "Latente · visor · " + lente.label + " · " + plano.effective.describe()
                 // A mesma rotação que o visor usa para pôr a imagem de pé no ecrã vai como etiqueta
                 // no ficheiro. Se divergissem, o visor mostrava direito e o ficheiro saía deitado.
-                val dng = DngWriter.write(
-                    ctx, sessao.imageCharacteristics, frame.result, frame.image, "$nome.dng", resumo,
-                    Present.exifOrientation(rotacaoDaImagem()))
-                MediaStoreOut(ctx).writeText("$nome.json", "application/json", Json.write(sidecar))
+                // Negativo e receita **num arquivo**, e não dois ficheiros soltos.
+                //
+                // Um negativo custa 24 MB e o *deflate* leva-o a 8 ou 9 sem tocar num bit da imagem —
+                // os dez bits úteis viajam em palavras de dezasseis, e é o byte de cima, quase
+                // constante, que comprime. A alternativa era comprimir a imagem em si, e essa mexia no
+                // caminho da captura, que está certificado.
+                val cru = frame.image.width.toLong() * frame.image.height * 2
+                val bytes = Archive.escrever(
+                    ctx, nome, sessao.imageCharacteristics, frame.result, frame.image, resumo,
+                    Present.exifOrientation(rotacaoDaImagem()), Json.write(sidecar))
                 contador++
-                relatar(nome + ".dng · " + (dng.bytes / 1024 / 1024) + " MB" +
+                relatar(nome + "." + Archive.EXTENSAO + " · " + (bytes / 1024 / 1024) +
+                        " MB de " + (cru / 1024 / 1024) +
                         (if (!frame.matchedByTimestamp) " · frame não emparelhado" else ""))
             } catch (t: Throwable) {
                 relatar("a escrita falhou: " + t.javaClass.simpleName + ": " + (t.message ?: ""))
@@ -2389,9 +2623,10 @@ class ViewfinderActivity : Activity() {
             }
             t.kelvin = kelvin.toString() + " K"
             t.tinta = String.format(java.util.Locale.US, "%+.2f", tinta)
-            if (Math.abs(compensacao) > 0.05f) {
-                t.compensacao = String.format(java.util.Locale.US, "%+.1f EV", compensacao)
-            }
+            // **Sempre**, e sem a unidade atrás: agora tem campo próprio com a etiqueta `EV` por cima, e
+            // um campo que desaparece a zero é um campo que se procura. Escondia-se quando ia colada à
+            // tinta, que é o contrário — ali, aparecer é que era a excepção.
+            t.compensacao = String.format(java.util.Locale.US, "%+.1f", compensacao)
 
             // Só o que não está visível noutro sítio. A objectiva está escrita no botão que a troca, a
             // abertura tem campo na grelha, o foco fixo aparece no campo do foco — repeti-los aqui era
@@ -2399,6 +2634,7 @@ class ViewfinderActivity : Activity() {
             t.vinheta = if (temPerfil) "VINH OK" else "SEM VINH"
             if (picos > 0f) t.vinheta += " · PICOS"
             if (fps > 0) t.fps = String.format(java.util.Locale.US, "%.0f FPS", fps)
+            t.fpsMedidos = fps
             return t
         }
 

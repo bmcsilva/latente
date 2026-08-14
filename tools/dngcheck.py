@@ -244,12 +244,30 @@ def raw_stats(tiff, tags, white):
     return {"min": lo, "max": hi, "média": total / n, "amostras": n, "acima do branco": over}
 
 
+def ler_negativo(path):
+    """Os bytes do negativo, esteja ele solto ou dentro do arquivo `.zip` da aplicação.
+
+    A aplicação passou a guardar cada fotografia num zip com o `.dng` e a receita lá dentro — 24 MB
+    passam a 7 ou 8, sem tocar num bit da imagem. As ferramentas têm de continuar a servir para os
+    dois casos, senão a promessa de o negativo ser verificável fica dependente de quem se lembra de
+    descomprimir primeiro.
+    """
+    if path.lower().endswith(".zip"):
+        import zipfile
+        with zipfile.ZipFile(path) as z:
+            nomes = [n for n in z.namelist() if n.lower().endswith(".dng")]
+            if not nomes:
+                raise SystemExit("%s não tem nenhum .dng lá dentro" % path)
+            return z.read(nomes[0])
+    with open(path, "rb") as fh:
+        return fh.read()
+
+
 def check(path):
     print("=" * 78)
     print(path)
     print("=" * 78)
-    with open(path, "rb") as fh:
-        data = fh.read()
+    data = ler_negativo(path)
     print("  tamanho                  %.1f MB" % (len(data) / 1024 / 1024))
 
     tiff = Tiff(data)
