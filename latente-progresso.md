@@ -2354,6 +2354,38 @@ Isto obrigou a ouvir o ecrã e não a configuração: virar o telefone ao contr�
 `DisplayManager.DisplayListener` trata disso, e só arruma quando a rotação mudou de facto, porque refazer
 o ecrã redimensiona a superfície e isso reinicia a câmara.
 
+### O visor seguia o pulso quando devia seguir o ecrã
+
+Defeito encontrado pelo utilizador: **telefone pousado na mesa, em retrato, e o visor a mostrar uma
+faixa larga** — a imagem deitada dentro de uma caixa alta.
+
+A causa vinha de uma premissa que tinha deixado de ser verdade. A rotação da imagem era lida do
+acelerómetro «porque a janela está travada em retrato e o sistema não roda» — e o sistema passou a
+rodar quando se fez a paisagem. Com o telefone pousado a gravidade não diz lado nenhum, o corpo fica
+com a última leitura (paisagem, se foi assim que foi pousado) e o visor desenhava para esse lado
+enquanto o ecrã estava em retrato.
+
+Separaram-se as duas rotações, que sempre foram duas coisas:
+
+- **o visor segue o ecrã**, porque a `SurfaceView` está presa a ele;
+- **o ficheiro segue o corpo**, porque a fotografia tem de sair de pé mesmo com a rotação travada.
+
+Coincidem quando a rotação automática está ligada e o telefone de pé, que é o caso normal. Os píxeis
+são os mesmos nos dois caminhos; o que muda é para que lado se desenha e o que se escreve na etiqueta.
+
+### As três linhas, e dois enganos do Android pelo caminho
+
+O botão de destinos dizia «IR». Passou a três linhas — desenhadas, como o disparador e a mordida, sem
+imagem nem dependência — e sem o triângulo do acento, porque as três linhas já dizem «abre uma lista».
+
+Centrá-las deu duas voltas, as duas medidas em píxeis no ecrã em vez de a olho:
+
+1. Um **desenho composto** num `TextView` fica à esquerda de onde o texto ficaria, e com o texto vazio
+   isso é encostado à margem. Passou a frente da vista (`foreground`).
+2. O `setForegroundGravity` **acrescenta `START`** a quem não traga gravidade relativa, e o `START`
+   ganha ao centro — as linhas continuavam coladas ao bordo. A saída é o glifo não ter tamanho
+   próprio: sem ele, a vista entrega a caixa inteira e o desenho centra-se nela sozinho.
+
 ### A galeria do telefone faz de visualizador, e a linha faz de menu
 
 «Não era mais fácil usar a app de galeria do telemóvel?» Era, e é o que se faz. A galeria tem zoom,
